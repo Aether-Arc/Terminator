@@ -5,7 +5,7 @@ langgraph
 openai
 pydantic
 redis
-chromadb
+# chromadb
 pandas
 numpy
 python-dotenv
