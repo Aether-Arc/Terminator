@@ -8,7 +8,7 @@ export default function Dashboard() {
       
       {/* VS Code Breadcrumbs */}
       <div className="text-xs text-gray-400 mb-4 flex items-center gap-2 border-b border-vscode-border pb-2 font-mono">
-        <span>eventos-ai- Skynet</span>
+        <span>Skynet</span>
         <span>&gt;</span>
         <span>src</span>
         <span>&gt;</span>

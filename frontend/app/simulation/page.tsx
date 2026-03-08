@@ -1,34 +1,22 @@
-"use client"
+import SimulationPanel from "../../components/SimulationPanel";
 
-import { simulateCrisis } from "../../lib/api"
+export default function SimulationPage() {
+  return (
+    <div className="h-full flex flex-col p-4 relative">
+      <div className="scanline"></div>
+      
+      <div className="text-xs text-gray-400 mb-4 flex items-center gap-2 border-b border-vscode-border pb-2 font-mono">
+        <span>eventos-ai-swarm</span>
+        <span>&gt;</span>
+        <span>src</span>
+        <span>&gt;</span>
+        <span className="text-vscode-blue">simulation_engine.tsx</span>
+      </div>
 
-export default function Simulation(){
-
-  const cancelSpeaker = async ()=>{
-
-    await simulateCrisis({
-      type:"speaker_cancelled"
-    })
-
-    alert("Speaker cancelled → system re-planned")
-
-  }
-
-  return(
-
-    <div>
-
-      <h1 className="text-xl mb-4">
-        Event Simulation
-      </h1>
-
-      <button
-        className="bg-red-600 p-3 rounded"
-        onClick={cancelSpeaker}
-      >
-        Simulate Speaker Cancellation
-      </button>
-
+      <div className="flex-1 flex flex-col">
+        <h2 className="text-xl text-vscode-text font-sans mb-4">Full Screen Chaos Engine</h2>
+        <SimulationPanel />
+      </div>
     </div>
   )
 }
