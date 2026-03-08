@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+langchain
+langgraph
+openai
+pydantic
+redis
+chromadb
+pandas
+numpy
+python-dotenv
+ortools
+aiosmtplib
+sqlalchemy
+psycopg2-binary
+scikit-learn
+networkx

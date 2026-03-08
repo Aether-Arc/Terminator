@@ -1,0 +1,118 @@
+# =========================
+# Operating System Files
+# =========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# =========================
+# IDEs and Editors
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# =========================
+# Python / Backend
+# =========================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# Testing and profiling
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# =========================
+# Node.js / Frontend (Next.js)
+# =========================
+frontend/node_modules/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/node_modules/
+
+# Vercel
+.vercel
+
+# =========================
+# Database & Logs
+# =========================
+*.sqlite
+*.sqlite3
+*.db
+backend/database/*.db
+backend/database/*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# =========================
+# Machine Learning / AI Artifacts
+# =========================
+# Ignore downloaded models or large vector store files if saved locally
+backend/memory/chroma_db/
+backend/memory/faiss_index/
+*.pt
+*.pth
+*.onnx
+
+# Ignore raw data outputs from simulation (unless you want them committed)
+# scripts/output/
