@@ -1,34 +1,41 @@
 "use client"
 import { useState } from "react"
-import { simulateCrisis } from "../lib/api"
 
 export default function SimulationPanel() {
   const [log, setLog] = useState<string[]>([])
 
-  const triggerEvent = async (type: string) => {
-    setLog(prev => [...prev, `Triggering: ${type}...`])
-    const res = await simulateCrisis({ type })
-    setLog(prev => [...prev, `Swarm Response: ${JSON.stringify(res.crisis)}`])
+  const triggerEvent = (type: string) => {
+    setLog(prev => [...prev, `<span class="text-vscode-blue">admin@eventos</span>:~$ inject_anomaly --type <span class="text-vscode-orange">'${type}'</span>`])
+    setTimeout(() => {
+      setLog(prev => [...prev, `<span class="text-red-500 font-bold">[CRITICAL]</span> Anomaly injected. Triggering Orchestrator...`])
+    }, 600)
   }
 
   return (
-    <div className="bg-gray-800 p-4 rounded mt-4 border border-red-500">
-      <h2 className="text-xl text-red-400 mb-4 font-bold">Chaos Engine (Demo Mode)</h2>
-      <div className="flex gap-4 mb-4">
-        <button onClick={() => triggerEvent("speaker_cancelled")} className="bg-red-600 px-4 py-2 rounded hover:bg-red-700">
-          Cancel Keynote Speaker
-        </button>
-        <button onClick={() => triggerEvent("room_overflow")} className="bg-orange-600 px-4 py-2 rounded hover:bg-orange-700">
-          Overcrowd Main Hall
-        </button>
-        <button onClick={() => triggerEvent("budget_cut")} className="bg-yellow-600 px-4 py-2 rounded hover:bg-yellow-700 text-black">
-          Slash Budget 20%
-        </button>
+    <div className="bg-[#1e1e1e] border border-red-900/40 rounded flex-1 flex flex-col shadow-lg relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-red-600 via-orange-500 to-red-600"></div>
+      
+      <div className="p-3 border-b border-vscode-border bg-[#252526] flex justify-between items-center">
+        <h2 className="text-vscode-text font-mono text-[11px] uppercase tracking-widest flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+          Chaos Injector
+        </h2>
       </div>
       
-      <div className="bg-black p-3 rounded h-32 overflow-y-auto font-mono text-sm text-green-400">
-        {log.map((l, i) => <div key={i}>{l}</div>)}
-        {log.length === 0 && <span className="text-gray-600">Waiting for crisis injection...</span>}
+      <div className="p-4 flex flex-col flex-1 gap-4">
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => triggerEvent("speaker_cancel")} className="border border-vscode-border bg-[#2d2d2d] hover:bg-red-900/40 text-vscode-text text-xs p-2 rounded transition-all text-left font-mono shadow-sm">
+            <span className="text-vscode-purple">exec</span> kill_keynote()
+          </button>
+          <button onClick={() => triggerEvent("room_overflow")} className="border border-vscode-border bg-[#2d2d2d] hover:bg-orange-900/40 text-vscode-text text-xs p-2 rounded transition-all text-left font-mono shadow-sm">
+            <span className="text-vscode-purple">exec</span> over_capacity()
+          </button>
+        </div>
+        
+        <div className="bg-black/60 p-3 rounded flex-1 overflow-y-auto font-mono text-xs border border-vscode-border/50 text-gray-300">
+          {log.map((l, i) => <div key={i} dangerouslySetInnerHTML={{ __html: l }} className="mb-1"></div>)}
+          {log.length === 0 && <span className="text-vscode-green opacity-50 italic">// Chaos engine idle. Awaiting command...</span>}
+        </div>
       </div>
     </div>
   )

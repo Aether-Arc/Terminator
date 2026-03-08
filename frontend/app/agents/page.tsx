@@ -7,7 +7,7 @@ export default function Agents(){
     <div>
 
       <h1 className="text-2xl mb-4">
-        Agent Swarm
+        Agent  Skynet
       </h1>
 
       <AgentGraph/>

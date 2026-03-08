@@ -44,7 +44,7 @@ export default function EventForm(){
         onClick={submit}
         className="bg-blue-600 px-4 py-2 rounded"
       >
-        Run AI Swarm
+        Run AI  Skynet
       </button>
 
     </div>
