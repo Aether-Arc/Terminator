@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface SwarmMessage {
   agent: string;
@@ -8,9 +9,11 @@ interface SwarmMessage {
 }
 
 export default function AgentGraph() {
+  const router = useRouter()
   const [activeNode, setActiveNode] = useState<string | null>(null)
   const [logs, setLogs] = useState<SwarmMessage[]>([])
   const [swarmStarted, setSwarmStarted] = useState(false)
+  const [isComplete, setIsComplete] = useState(false)
   const terminalEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -18,7 +21,7 @@ export default function AgentGraph() {
   }, [logs])
 
   useEffect(() => {
-    // 1. Clean WebSocket connection without aggressive reconnect loops
+    // 1. Clean WebSocket connection
     const ws = new WebSocket('ws://localhost:8000/ws/swarm')
     let isMounted = true
 
@@ -29,11 +32,16 @@ export default function AgentGraph() {
       setLogs((prev) => [...prev, data])
       
       if (data.status === 'success' || data.status === 'idle') {
-        setTimeout(() => { if (isMounted) setActiveNode(null) }, 1500)
+        setTimeout(() => { if (isMounted) setActiveNode(null) }, 1000)
+      }
+      
+      // Tell the UI we are finished so we can show the button!
+      if (data.agent === 'Orchestrator' && data.status === 'idle') {
+        setIsComplete(true)
       }
     }
 
-    // 2. Auto-trigger the API Call exactly once
+    // 2. Auto-trigger the API Call
     const savedPayload = localStorage.getItem("eventPayload")
     if (savedPayload && !swarmStarted) {
       setSwarmStarted(true)
@@ -41,14 +49,17 @@ export default function AgentGraph() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: savedPayload
-      }).then(() => {
+      }).then(async (res) => {
+        // CRITICAL FIX: Save the actual output from the backend!
+        const resultData = await res.json()
+        localStorage.setItem("swarmResult", JSON.stringify(resultData))
         localStorage.removeItem("eventPayload")
       }).catch(err => {
         setLogs(prev => [...prev, { agent: 'SYSTEM', action: `ERROR: ${err.message}`, status: 'error' }])
       })
     }
 
-    // 3. Graceful cleanup for React StrictMode
+    // 3. Graceful cleanup
     return () => {
       isMounted = false
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
@@ -74,10 +85,19 @@ export default function AgentGraph() {
 
   return (
     <div className="bg-[#1e1e1e] rounded border border-vscode-border p-6 flex flex-col h-full relative terminal-glow shadow-xl">
-      <h2 className="text-vscode-text font-mono text-sm mb-8 flex items-center gap-2 border-b border-vscode-border pb-2">
-        <div className="w-2 h-2 rounded-full bg-vscode-blue animate-pulse"></div>
-        Live Cognitive Network
-      </h2>
+      <div className="flex justify-between items-center mb-8 border-b border-vscode-border pb-2">
+        <h2 className="text-vscode-text font-mono text-sm flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${isComplete ? 'bg-vscode-green' : 'bg-vscode-blue animate-pulse'}`}></div>
+          Live Cognitive Network
+        </h2>
+        
+        {/* NEW FIX: This button appears when the swarm finishes! */}
+        {isComplete && (
+          <button onClick={() => router.push('/dashboard')} className="bg-vscode-green/20 text-vscode-green border border-vscode-green px-4 py-1 text-xs font-bold hover:bg-vscode-green hover:text-white transition-all rounded">
+            VIEW RESULTS
+          </button>
+        )}
+      </div>
 
       <div className="flex-1 flex items-center justify-center">
         <div className="grid grid-cols-3 gap-8 relative w-full max-w-3xl">
