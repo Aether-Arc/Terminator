@@ -1,6 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from orchestrator.orchestrator import Orchestrator
+from orchestrator.orchestrator import EventOrchestrator
 from realtime.websocket_stream import swarm_streamer
 
 app = FastAPI()
@@ -12,7 +12,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-orchestrator = Orchestrator()
+orchestrator = EventOrchestrator()
 
 @app.websocket("/ws/swarm")
 async def websocket_endpoint(websocket: WebSocket):
@@ -27,5 +27,5 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.post("/plan_event")
 async def create_event(event_data: dict):
     # Pass the streamer to the orchestrator so it can emit live events
-    result = await orchestrator.run_event(event_data, swarm_streamer)
+    result = await orchestrator.plan_event(event_data, swarm_streamer) 
     return result
