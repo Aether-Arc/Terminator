@@ -43,7 +43,7 @@ export default function EventForm() {
 
         <div>
           <span className="text-vscode-purple">"participants_csv"</span>: 
-          <input required type="file" accept=".csv" className="ml-2 text-vscode-blue file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-vscode-blue file:text-white hover:file:bg-blue-600" />
+          <input  type="file" accept=".csv" className="ml-2 text-vscode-blue file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-vscode-blue file:text-white hover:file:bg-blue-600" />
         </div>
 
         <div className="mt-8 border-t border-vscode-border pt-6 flex justify-end">

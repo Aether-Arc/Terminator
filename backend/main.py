@@ -1,22 +1,31 @@
-from fastapi import FastAPI
-from orchestrator.orchestrator import EventOrchestrator
-from models.event_model import EventInput
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from orchestrator.orchestrator import Orchestrator
+from realtime.websocket_stream import swarm_streamer
 
 app = FastAPI()
 
-orchestrator = EventOrchestrator()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # For hackathon demo purposes
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+orchestrator = Orchestrator()
+
+@app.websocket("/ws/swarm")
+async def websocket_endpoint(websocket: WebSocket):
+    await swarm_streamer.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive
+            data = await websocket.receive_text()
+    except WebSocketDisconnect:
+        swarm_streamer.disconnect(websocket)
 
 @app.post("/plan_event")
-async def plan_event(event: EventInput):
-    return await orchestrator.plan_event(event)
-
-
-@app.post("/simulate_crisis")
-async def crisis(data: dict):
-    return await orchestrator.handle_crisis(data)
-
-
-@app.get("/status")
-def status():
-    return {"system": "EventOS running"}
+async def create_event(event_data: dict):
+    # Pass the streamer to the orchestrator so it can emit live events
+    result = await orchestrator.run_event(event_data, swarm_streamer)
+    return result

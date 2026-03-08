@@ -1,15 +1,26 @@
 from fastapi import WebSocket
+from typing import List
+import json
 
-connections = []
+class SwarmStreamer:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
 
-async def connect(ws: WebSocket):
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
 
-    await ws.accept()
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
 
-    connections.append(ws)
+    async def broadcast(self, agent_name: str, action: str, status: str = "thinking"):
+        message = json.dumps({
+            "agent": agent_name,
+            "action": action,
+            "status": status
+        })
+        for connection in self.active_connections:
+            await connection.send_text(message)
 
-async def broadcast(event):
-
-    for ws in connections:
-
-        await ws.send_json(event)
+# Global instance to be used by the Orchestrator
+swarm_streamer = SwarmStreamer()
