@@ -13,7 +13,7 @@ export default function AgentGraph() {
   const [activeNode, setActiveNode] = useState<string | null>(null)
   const [logs, setLogs] = useState<SwarmMessage[]>([])
   const [swarmStarted, setSwarmStarted] = useState(false)
-  const [isComplete, setIsComplete] = useState(false)
+  const [dataSaved, setDataSaved] = useState(false) // NEW STATE
   const terminalEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -21,7 +21,6 @@ export default function AgentGraph() {
   }, [logs])
 
   useEffect(() => {
-    // 1. Clean WebSocket connection
     const ws = new WebSocket('ws://localhost:8000/ws/swarm')
     let isMounted = true
 
@@ -34,14 +33,8 @@ export default function AgentGraph() {
       if (data.status === 'success' || data.status === 'idle') {
         setTimeout(() => { if (isMounted) setActiveNode(null) }, 1000)
       }
-      
-      // Tell the UI we are finished so we can show the button!
-      if (data.agent === 'Orchestrator' && data.status === 'idle') {
-        setIsComplete(true)
-      }
     }
 
-    // 2. Auto-trigger the API Call
     const savedPayload = localStorage.getItem("eventPayload")
     if (savedPayload && !swarmStarted) {
       setSwarmStarted(true)
@@ -50,16 +43,16 @@ export default function AgentGraph() {
         headers: { 'Content-Type': 'application/json' },
         body: savedPayload
       }).then(async (res) => {
-        // CRITICAL FIX: Save the actual output from the backend!
         const resultData = await res.json()
         localStorage.setItem("swarmResult", JSON.stringify(resultData))
         localStorage.removeItem("eventPayload")
+        // CRITICAL FIX: Only show the button AFTER the data is safely saved!
+        setDataSaved(true) 
       }).catch(err => {
         setLogs(prev => [...prev, { agent: 'SYSTEM', action: `ERROR: ${err.message}`, status: 'error' }])
       })
     }
 
-    // 3. Graceful cleanup
     return () => {
       isMounted = false
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
@@ -87,13 +80,13 @@ export default function AgentGraph() {
     <div className="bg-[#1e1e1e] rounded border border-vscode-border p-6 flex flex-col h-full relative terminal-glow shadow-xl">
       <div className="flex justify-between items-center mb-8 border-b border-vscode-border pb-2">
         <h2 className="text-vscode-text font-mono text-sm flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isComplete ? 'bg-vscode-green' : 'bg-vscode-blue animate-pulse'}`}></div>
+          <div className={`w-2 h-2 rounded-full ${dataSaved ? 'bg-vscode-green' : 'bg-vscode-blue animate-pulse'}`}></div>
           Live Cognitive Network
         </h2>
         
-        {/* NEW FIX: This button appears when the swarm finishes! */}
-        {isComplete && (
-          <button onClick={() => router.push('/dashboard')} className="bg-vscode-green/20 text-vscode-green border border-vscode-green px-4 py-1 text-xs font-bold hover:bg-vscode-green hover:text-white transition-all rounded">
+        {/* Button relies on dataSaved now, guaranteeing no empty dashboard! */}
+        {dataSaved && (
+          <button onClick={() => router.push('/dashboard')} className="bg-vscode-green/20 text-vscode-green border border-vscode-green px-4 py-1 text-xs font-bold hover:bg-vscode-green hover:text-white transition-all rounded shadow-[0_0_10px_rgba(106,153,85,0.4)]">
             VIEW RESULTS
           </button>
         )}
@@ -101,41 +94,13 @@ export default function AgentGraph() {
 
       <div className="flex-1 flex items-center justify-center">
         <div className="grid grid-cols-3 gap-8 relative w-full max-w-3xl">
-          
-          <div className="col-span-3 flex justify-center mb-4">
-            <div className={getNodeClass("Orchestrator") + " w-64"}>
-              <div className="font-bold text-sm">Orchestrator</div>
-              <div className="text-[10px] mt-1 text-gray-500">Master Node</div>
-            </div>
-          </div>
-
-          <div className={getNodeClass("PlannerAgent")}>
-            <div className="font-bold text-sm">Planner</div>
-            <div className="text-[10px] text-gray-500">Strategy Gen</div>
-          </div>
-          
-          <div className={getNodeClass("WorldModelAgent")}>
-            <div className="font-bold text-sm">World Model</div>
-            <div className="text-[10px] text-gray-500">CNN/RNN Sim</div>
-          </div>
-
-          <div className={getNodeClass("CriticAgent")}>
-            <div className="font-bold text-sm">Critic</div>
-            <div className="text-[10px] text-gray-500">RL Eval</div>
-          </div>
-
-          <div className={getNodeClass("SchedulerAgent") + " mt-4"}>
-            <div className="font-bold text-sm">Scheduler</div>
-          </div>
-          
-          <div className={getNodeClass("MarketingAgent") + " mt-4"}>
-            <div className="font-bold text-sm">Marketing</div>
-          </div>
-
-          <div className={getNodeClass("EmailAgent") + " mt-4"}>
-            <div className="font-bold text-sm">Outreach</div>
-          </div>
-
+          <div className="col-span-3 flex justify-center mb-4"><div className={getNodeClass("Orchestrator") + " w-64"}><div className="font-bold text-sm">Orchestrator</div><div className="text-[10px] mt-1 text-gray-500">Master Node</div></div></div>
+          <div className={getNodeClass("PlannerAgent")}><div className="font-bold text-sm">Planner</div><div className="text-[10px] text-gray-500">Strategy Gen</div></div>
+          <div className={getNodeClass("WorldModelAgent")}><div className="font-bold text-sm">World Model</div><div className="text-[10px] text-gray-500">CNN/RNN Sim</div></div>
+          <div className={getNodeClass("CriticAgent")}><div className="font-bold text-sm">Critic</div><div className="text-[10px] text-gray-500">RL Eval</div></div>
+          <div className={getNodeClass("SchedulerAgent") + " mt-4"}><div className="font-bold text-sm">Scheduler</div></div>
+          <div className={getNodeClass("MarketingAgent") + " mt-4"}><div className="font-bold text-sm">Marketing</div></div>
+          <div className={getNodeClass("EmailAgent") + " mt-4"}><div className="font-bold text-sm">Outreach</div></div>
         </div>
       </div>
 
