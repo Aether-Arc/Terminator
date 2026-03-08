@@ -6,13 +6,38 @@ export default function EventForm() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
-    // Simulate sending data to backend, then redirect to dashboard
-    setTimeout(() => {
-      router.push('/dashboard')
-    }, 1500)
+    
+    // Extract form data
+    const formData = new FormData(e.currentTarget)
+    const payload = {
+      name: formData.get("event_name"),
+      expected_crowd: parseInt(formData.get("expected_crowd") as string),
+      marketing_prompt: formData.get("marketing_prompt"),
+      // We skip actual file upload for JSON APIs to avoid serialization errors in the demo
+      has_csv: !!formData.get("participants_csv") 
+    }
+
+    try {
+      // Hit the real backend endpoint
+      const response = await fetch('http://localhost:8000/plan_event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      
+      if (response.ok) {
+        router.push('/dashboard')
+      } else {
+        console.error("Swarm rejected the payload")
+      }
+    } catch (error) {
+      console.error("Connection to backend failed:", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -24,26 +49,26 @@ export default function EventForm() {
       <form onSubmit={handleSubmit} className="p-6 text-vscode-text flex flex-col gap-4">
         <div>
           <span className="text-vscode-purple">"event_name"</span>: 
-          <input required type="text" defaultValue="Neurathon 2026" className="ml-2 bg-[#2d2d2d] border border-vscode-border text-vscode-orange px-2 py-1 rounded outline-none focus:border-vscode-blue w-64" />
+          <input required name="event_name" type="text" defaultValue="Neurathon 2026" className="ml-2 bg-[#2d2d2d] border border-vscode-border text-vscode-orange px-2 py-1 rounded outline-none focus:border-vscode-blue w-64" />
           <span className="text-vscode-text">,</span>
         </div>
 
         <div>
           <span className="text-vscode-purple">"expected_crowd"</span>: 
-          <input required type="number" defaultValue={1500} className="ml-2 bg-[#2d2d2d] border border-vscode-border text-vscode-green px-2 py-1 rounded outline-none focus:border-vscode-blue w-32" />
+          <input required name="expected_crowd" type="number" defaultValue={1500} className="ml-2 bg-[#2d2d2d] border border-vscode-border text-vscode-green px-2 py-1 rounded outline-none focus:border-vscode-blue w-32" />
           <span className="text-vscode-text">,</span>
         </div>
 
         <div>
           <span className="text-vscode-purple">"marketing_prompt"</span>: 
           <span className="text-vscode-text">{" {"}</span>
-          <textarea required defaultValue="We are hosting a massive AI hackathon with top IITs. Make it sound highly competitive and futuristic." rows={3} className="block mt-2 ml-8 bg-[#2d2d2d] border border-vscode-border text-vscode-orange px-2 py-1 rounded outline-none focus:border-vscode-blue w-[80%] resize-none"></textarea>
+          <textarea required name="marketing_prompt" defaultValue="We are hosting a massive AI hackathon with top IITs. Make it sound highly competitive and futuristic." rows={3} className="block mt-2 ml-8 bg-[#2d2d2d] border border-vscode-border text-vscode-orange px-2 py-1 rounded outline-none focus:border-vscode-blue w-[80%] resize-none"></textarea>
           <span className="text-vscode-text mt-2 block">{"},"}</span>
         </div>
 
         <div>
           <span className="text-vscode-purple">"participants_csv"</span>: 
-          <input  type="file" accept=".csv" className="ml-2 text-vscode-blue file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-vscode-blue file:text-white hover:file:bg-blue-600" />
+          <input name="participants_csv" type="file" accept=".csv" className="ml-2 text-vscode-blue file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-vscode-blue file:text-white hover:file:bg-blue-600" />
         </div>
 
         <div className="mt-8 border-t border-vscode-border pt-6 flex justify-end">
