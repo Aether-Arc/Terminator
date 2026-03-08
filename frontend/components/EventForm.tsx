@@ -20,24 +20,10 @@ export default function EventForm() {
       has_csv: !!formData.get("participants_csv") 
     }
 
-    try {
-      // Hit the real backend endpoint
-      const response = await fetch('http://localhost:8000/plan_event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      
-      if (response.ok) {
-        router.push('/dashboard')
-      } else {
-        console.error("Swarm rejected the payload")
-      }
-    } catch (error) {
-      console.error("Connection to backend failed:", error)
-    } finally {
-      setLoading(false)
-    }
+    // Save payload to localStorage and redirect to the agents graph 
+    // to let the visualizer handle the API fetch, websocket, and data persistence.
+    localStorage.setItem("eventPayload", JSON.stringify(payload))
+    router.push('/agents')
   }
 
   return (

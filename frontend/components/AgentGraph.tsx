@@ -12,14 +12,17 @@ export default function AgentGraph() {
   const router = useRouter()
   const [activeNode, setActiveNode] = useState<string | null>(null)
   const [logs, setLogs] = useState<SwarmMessage[]>([])
-  const [swarmStarted, setSwarmStarted] = useState(false)
-  const [dataSaved, setDataSaved] = useState(false) // NEW STATE
+  const [dataSaved, setDataSaved] = useState(false)
+  
   const terminalEndRef = useRef<HTMLDivElement>(null)
+  const hasFetched = useRef(false) // Safely prevents React Strict Mode double-firing
 
+  // Auto-scroll terminal
   useEffect(() => {
     terminalEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [logs])
 
+  // 1. WEBSOCKET EFFECT (Only handles live log updates)
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:8000/ws/swarm')
     let isMounted = true
@@ -35,31 +38,42 @@ export default function AgentGraph() {
       }
     }
 
-    const savedPayload = localStorage.getItem("eventPayload")
-    if (savedPayload && !swarmStarted) {
-      setSwarmStarted(true)
-      fetch('http://localhost:8000/plan_event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: savedPayload
-      }).then(async (res) => {
-        const resultData = await res.json()
-        localStorage.setItem("swarmResult", JSON.stringify(resultData))
-        localStorage.removeItem("eventPayload")
-        // CRITICAL FIX: Only show the button AFTER the data is safely saved!
-        setDataSaved(true) 
-      }).catch(err => {
-        setLogs(prev => [...prev, { agent: 'SYSTEM', action: `ERROR: ${err.message}`, status: 'error' }])
-      })
-    }
-
     return () => {
       isMounted = false
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         ws.close()
       }
     }
-  }, [swarmStarted])
+  }, []) // Empty dependency array ensures WebSocket stays open!
+
+  // 2. FETCH EFFECT (Only handles sending the payload to the backend)
+  useEffect(() => {
+    if (hasFetched.current) return;
+
+    const savedPayload = localStorage.getItem("eventPayload")
+    
+    if (savedPayload) {
+      hasFetched.current = true; // Lock the fetch so it only happens once
+      
+      setLogs(prev => [...prev, { agent: 'SYSTEM', action: 'Initiating Swarm Network...', status: 'thinking' }])
+
+      fetch('http://localhost:8000/plan_event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: savedPayload
+      }).then(async (res) => {
+        if (!res.ok) throw new Error(`Server returned status ${res.status}`)
+        
+        const resultData = await res.json()
+        localStorage.setItem("swarmResult", JSON.stringify(resultData))
+        localStorage.removeItem("eventPayload") // Clean up payload
+        setDataSaved(true) // Show the "VIEW RESULTS" button
+        
+      }).catch(err => {
+        setLogs(prev => [...prev, { agent: 'SYSTEM', action: `FETCH ERROR: ${err.message}`, status: 'error' }])
+      })
+    }
+  }, []) // Empty dependency array ensures it only attempts to run on mount!
 
   const getNodeClass = (nodeName: string) => {
     const base = "p-4 rounded border font-mono text-center transition-all duration-300 relative overflow-hidden min-h-[80px] flex flex-col items-center justify-center "
@@ -84,7 +98,6 @@ export default function AgentGraph() {
           Live Cognitive Network
         </h2>
         
-        {/* Button relies on dataSaved now, guaranteeing no empty dashboard! */}
         {dataSaved && (
           <button onClick={() => router.push('/dashboard')} className="bg-vscode-green/20 text-vscode-green border border-vscode-green px-4 py-1 text-xs font-bold hover:bg-vscode-green hover:text-white transition-all rounded shadow-[0_0_10px_rgba(106,153,85,0.4)]">
             VIEW RESULTS
