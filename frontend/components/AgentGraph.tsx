@@ -1,105 +1,134 @@
 "use client"
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 interface SwarmMessage {
   agent: string;
   action: string;
-  status: 'thinking' | 'simulating' | 'success' | 'idle';
+  status: 'thinking' | 'simulating' | 'success' | 'idle' | 'error';
 }
 
 export default function AgentGraph() {
   const [activeNode, setActiveNode] = useState<string | null>(null)
   const [logs, setLogs] = useState<SwarmMessage[]>([])
+  const [swarmStarted, setSwarmStarted] = useState(false)
+  const terminalEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    // Connect to FastAPI WebSocket
+    terminalEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [logs])
+
+  useEffect(() => {
+    // 1. Clean WebSocket connection without aggressive reconnect loops
     const ws = new WebSocket('ws://localhost:8000/ws/swarm')
+    let isMounted = true
 
     ws.onmessage = (event) => {
+      if (!isMounted) return
       const data: SwarmMessage = JSON.parse(event.data)
       setActiveNode(data.agent)
-      setLogs((prev) => [...prev, data].slice(-6)) // Keep last 6 logs
+      setLogs((prev) => [...prev, data])
       
-      if (data.status === 'success') {
-        setTimeout(() => setActiveNode(null), 2000)
+      if (data.status === 'success' || data.status === 'idle') {
+        setTimeout(() => { if (isMounted) setActiveNode(null) }, 1500)
       }
     }
 
-    return () => ws.close()
-  }, [])
-
-  // Helper function to dynamically glow the active node
-  const getNodeClass = (nodeName: string) => {
-    const base = "p-4 rounded border font-mono text-center transition-all duration-300 relative overflow-hidden "
-    if (activeNode === nodeName) {
-      return base + "bg-cyber-cyan/20 border-cyber-cyan shadow-[0_0_30px_rgba(0,240,255,0.6)] text-white scale-105 z-10"
+    // 2. Auto-trigger the API Call exactly once
+    const savedPayload = localStorage.getItem("eventPayload")
+    if (savedPayload && !swarmStarted) {
+      setSwarmStarted(true)
+      fetch('http://localhost:8000/plan_event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: savedPayload
+      }).then(() => {
+        localStorage.removeItem("eventPayload")
+      }).catch(err => {
+        setLogs(prev => [...prev, { agent: 'SYSTEM', action: `ERROR: ${err.message}`, status: 'error' }])
+      })
     }
-    return base + "bg-[#0a0a0f] border-cyber-border text-gray-500"
+
+    // 3. Graceful cleanup for React StrictMode
+    return () => {
+      isMounted = false
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close()
+      }
+    }
+  }, [swarmStarted])
+
+  const getNodeClass = (nodeName: string) => {
+    const base = "p-4 rounded border font-mono text-center transition-all duration-300 relative overflow-hidden min-h-[80px] flex flex-col items-center justify-center "
+    if (activeNode === nodeName) {
+      return base + "bg-vscode-blue/20 border-vscode-blue shadow-[0_0_15px_rgba(86,156,214,0.4)] text-white scale-105 z-10"
+    }
+    return base + "bg-[#252526] border-vscode-border text-gray-400"
+  }
+
+  const getStatusColor = (status: string) => {
+    if (status === 'success') return 'text-vscode-green'
+    if (status === 'error') return 'text-red-500'
+    if (status === 'simulating') return 'text-vscode-purple'
+    return 'text-vscode-blue'
   }
 
   return (
-    <div className="hud-panel p-6 flex flex-col h-full relative">
-      <h2 className="text-cyber-cyan uppercase tracking-widest text-xs font-bold mb-8 flex items-center gap-2">
-        <div className="w-2 h-2 rounded-full bg-cyber-cyan animate-pulse"></div>
+    <div className="bg-[#1e1e1e] rounded border border-vscode-border p-6 flex flex-col h-full relative terminal-glow shadow-xl">
+      <h2 className="text-vscode-text font-mono text-sm mb-8 flex items-center gap-2 border-b border-vscode-border pb-2">
+        <div className="w-2 h-2 rounded-full bg-vscode-blue animate-pulse"></div>
         Live Cognitive Network
       </h2>
 
-      {/* Visual Agent Graph */}
       <div className="flex-1 flex items-center justify-center">
-        <div className="grid grid-cols-3 gap-12 relative w-full max-w-2xl">
+        <div className="grid grid-cols-3 gap-8 relative w-full max-w-3xl">
           
-          {/* Top Level: Orchestrator */}
-          <div className="col-span-3 flex justify-center mb-8">
-            <div className={getNodeClass("Orchestrator")}>
-              <div className="font-bold tracking-widest text-sm">Orchestrator</div>
-              <div className="text-[10px] mt-1 opacity-70">Master Node</div>
+          <div className="col-span-3 flex justify-center mb-4">
+            <div className={getNodeClass("Orchestrator") + " w-64"}>
+              <div className="font-bold text-sm">Orchestrator</div>
+              <div className="text-[10px] mt-1 text-gray-500">Master Node</div>
             </div>
           </div>
 
-          {/* Reasoning Level */}
           <div className={getNodeClass("PlannerAgent")}>
             <div className="font-bold text-sm">Planner</div>
-            <div className="text-[10px] opacity-70">Strategy Gen</div>
+            <div className="text-[10px] text-gray-500">Strategy Gen</div>
           </div>
           
           <div className={getNodeClass("WorldModelAgent")}>
             <div className="font-bold text-sm">World Model</div>
-            <div className="text-[10px] opacity-70">Environment Sim</div>
+            <div className="text-[10px] text-gray-500">CNN/RNN Sim</div>
           </div>
 
           <div className={getNodeClass("CriticAgent")}>
             <div className="font-bold text-sm">Critic</div>
-            <div className="text-[10px] opacity-70">Reward Eval</div>
+            <div className="text-[10px] text-gray-500">RL Eval</div>
           </div>
 
-          {/* Execution Level */}
-          <div className={getNodeClass("SchedulerAgent") + " mt-8"}>
+          <div className={getNodeClass("SchedulerAgent") + " mt-4"}>
             <div className="font-bold text-sm">Scheduler</div>
           </div>
           
-          <div className={getNodeClass("MarketingAgent") + " mt-8"}>
+          <div className={getNodeClass("MarketingAgent") + " mt-4"}>
             <div className="font-bold text-sm">Marketing</div>
           </div>
 
-          <div className={getNodeClass("EmailAgent") + " mt-8"}>
+          <div className={getNodeClass("EmailAgent") + " mt-4"}>
             <div className="font-bold text-sm">Outreach</div>
           </div>
 
         </div>
       </div>
 
-      {/* Live Action Stream Terminal */}
-      <div className="mt-8 bg-black/80 border border-cyber-border rounded p-4 h-32 overflow-hidden flex flex-col justify-end">
+      <div className="mt-8 bg-[#0d0d0d] border border-vscode-border rounded h-40 overflow-y-auto p-4 font-mono text-[11px] shadow-inner relative">
         {logs.map((log, i) => (
-          <div key={i} className="font-mono text-[11px] mb-1 animate-fade-in-up flex items-center gap-2">
-            <span className={log.status === 'success' ? 'text-cyber-green' : 'text-cyber-cyan'}>
-              [{new Date().toLocaleTimeString()}]
-            </span>
-            <span className="text-cyber-purple font-bold">@{log.agent}:</span>
-            <span className="text-gray-300">{log.action}</span>
+          <div key={i} className="flex gap-3 mb-1">
+            <span className="text-gray-600 shrink-0">[{new Date().toLocaleTimeString()}]</span>
+            <span className="text-vscode-blue font-bold w-32 shrink-0 text-right">@{log.agent}:</span>
+            <span className={`${getStatusColor(log.status)} flex-1`}>{log.action}</span>
           </div>
         ))}
-        {logs.length === 0 && <div className="text-gray-600 font-mono text-xs italic">// Network idle. Awaiting stimulus.</div>}
+        {logs.length === 0 && <div className="text-gray-600 italic">// Awaiting uplink...</div>}
+        <div ref={terminalEndRef} />
       </div>
     </div>
   )
