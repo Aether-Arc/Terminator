@@ -41,19 +41,41 @@ class PlannerAgent:
             return {"error": "API Fallback", "sessions": []}
 
     async def generate_multiple_plans(self, event_data, count=3):
-        """Generates multiple unique candidate plans asynchronously with API protections."""
         plans = []
         event_name = event_data.get('name', 'Hackathon')
         crowd = event_data.get('expected_crowd', 500)
+        
+        # Fetch the memories injected by the LangGraph
+        history = event_data.get("historical_context", "No past data available.")
+        rl_strategy = event_data.get("learned_strategy", "Prioritize balanced scheduling.")
+        critic_notes = event_data.get("critic_feedback", None)
 
         for i in range(count):
+
+            feedback_prompt = ""
+            if critic_notes:
+                feedback_prompt = f"""
+                ⚠️ CRITIC REJECTION NOTICE: Your previous plan was rejected by the Critic Agent.
+                The Critic said: "{critic_notes}"
+                You MUST fix these specific issues in this new variation.
+                """
+
+
             prompt = f"""
             You are an elite event architect planning '{event_name}' for {crowd} people.
+            {feedback_prompt}
             Design a UNIQUE, distinct variation (Option {i+1}) of an event plan.
             Break the event down into exactly 5 logical milestones/sessions.
+            
+            🧠 SWARM INTELLIGENCE (LEARNED CONTEXT):
+            - Past similar events memory: {history}
+            - Reinforcement Learning Policy Suggestion: {rl_strategy}
+            
+            Based on the SWARM INTELLIGENCE above, avoid past mistakes and adapt your plan.
+            
             Respond ONLY in valid JSON format like this:
             {{
-                "plan_overview": "String describing the vibe",
+                "plan_overview": "String describing the vibe and how it adapts past lessons",
                 "sessions": [
                     {{"name": "Opening Ceremony", "duration_hours": 1, "requires_main_stage": true}}
                 ]
@@ -69,23 +91,12 @@ class PlannerAgent:
                 
             except Exception as e:
                 print(f"API Rate Limit hit on plan {i+1}. Using Emergency Fallback.")
-                # PROTECTION 3: The Show Must Go On! Inject a valid fallback plan.
+                # ... keep your existing fallback logic here ...
                 fallback_plan = {
                     "plan_overview": f"Emergency Contingency Plan Option {i+1}",
-                    "sessions": [
-                        {"name": "Opening Ceremony & Briefing", "duration_hours": 1, "requires_main_stage": True},
-                        {"name": "Team Formation & Setup", "duration_hours": 1, "requires_main_stage": False},
-                        {"name": "Core Hacking Phase", "duration_hours": 4, "requires_main_stage": False},
-                        {"name": "Mentorship Checkpoint", "duration_hours": 1, "requires_main_stage": True},
-                        {"name": "Final Pitches & Awards", "duration_hours": 2, "requires_main_stage": True}
-                    ]
+                    "sessions": [{"name": "Core Phase", "duration_hours": 4, "requires_main_stage": False}]
                 }
                 fallback_plan["content"] = str(fallback_plan)
                 plans.append(fallback_plan)
-                
-            # PROTECTION 2: Pacing. Wait 3.5 seconds before asking Gemini for the next plan.
-            # This completely avoids the "Burst" API rate limit.
-            # if i < count - 1:
-            #     await asyncio.sleep(3.5)
                 
         return plans

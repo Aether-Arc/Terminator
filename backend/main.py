@@ -90,6 +90,11 @@ async def plan_event(event_data: dict):
     result = await orchestrator.plan_event(event_data, swarm_streamer)
     return result
 
+@app.post("/approve_plan")
+async def approve_plan(event_data: dict): 
+    result = await orchestrator.approve_plan(event_data, swarm_streamer)
+    return result
+
 @app.post("/simulate_crisis")
 async def crisis(data: dict):
     result = await orchestrator.handle_crisis(data, swarm_streamer)

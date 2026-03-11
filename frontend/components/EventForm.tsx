@@ -10,18 +10,23 @@ export default function EventForm() {
     e.preventDefault()
     setLoading(true)
     
-    // Extract form data
     const formData = new FormData(e.currentTarget)
+    const file = formData.get("participants_csv") as File
+    
+    // Safely read the CSV if it was uploaded, otherwise default to empty string
+    let csvContent = ""
+    if (file && file.size > 0) {
+      csvContent = await file.text()
+    }
+
     const payload = {
       name: formData.get("event_name"),
       expected_crowd: parseInt(formData.get("expected_crowd") as string),
       marketing_prompt: formData.get("marketing_prompt"),
-      // We skip actual file upload for JSON APIs to avoid serialization errors in the demo
-      has_csv: !!formData.get("participants_csv") 
+      csv_content: csvContent, // Pass raw text to backend safely
+      has_csv: csvContent.length > 0 
     }
 
-    // Save payload to localStorage and redirect to the agents graph 
-    // to let the visualizer handle the API fetch, websocket, and data persistence.
     localStorage.setItem("eventPayload", JSON.stringify(payload))
     router.push('/agents')
   }
@@ -54,6 +59,7 @@ export default function EventForm() {
 
         <div>
           <span className="text-vscode-purple">"participants_csv"</span>: 
+          {/* Optional file input - no "required" tag */}
           <input name="participants_csv" type="file" accept=".csv" className="ml-2 text-vscode-blue file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-vscode-blue file:text-white hover:file:bg-blue-600" />
         </div>
 

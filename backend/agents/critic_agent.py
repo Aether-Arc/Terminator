@@ -26,7 +26,8 @@ class CriticAgent:
         Respond ONLY in valid JSON format:
         {{
             "vulnerability": "String describing the main flaw",
-            "score": 85
+            "score": 85,
+            "feedback": "Explain exactly what is wrong and what the Planner needs to fix."
         }}
         """
         response = await self.llm.ainvoke(prompt)
