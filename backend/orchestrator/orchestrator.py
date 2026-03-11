@@ -39,10 +39,12 @@ class EventOrchestrator:
     # ... (plan_event and approve_plan remain exactly the same as previously defined) ...
     # [Paste your existing plan_event and approve_plan here]
 
-    async def handle_crisis(self, crisis_data, streamer):
+    async def handle_crisis(self, crisis_data, streamer, crisis_event):
         crisis_desc = crisis_data.get('description', 'Unknown anomaly detected.')
         event_name = crisis_data.get("event_name", "the current event") 
         crowd_size = crisis_data.get("expected_crowd", 500)
+        new_schedule = self.scheduler.resolve_conflicts(crisis_event)
+        mitigation_strategy = self.crisis_agent.analyze(crisis_event)
         
         await streamer.broadcast("Orchestrator", f"CRISIS DETECTED: {crisis_desc}", "error")
         
@@ -89,12 +91,21 @@ class EventOrchestrator:
         store_memory(f"Event: {event_name} | Crisis: {crisis_desc} | MCTS Action: {best_action_name} | Mitigation: {mitigation_text}")
         
         await streamer.broadcast("EmailAgent", "Crisis override: Blasting urgent updates to participants...", "warning")
+
         csv_content = crisis_data.get("csv_content", "") 
+        notification_content = {
+            "subject": f"URGENT: Change in {event_name} Schedule",
+            "body": f"Due to a detected anomaly ({crisis_desc}), we have shifted the schedule. {mitigation_text}",
+            "recipients": crisis_data.get("csv_content", "") # Pass the actual CSV data here
+        }
         emergency_logs = self.email.send_invites(csv_content, f"URGENT EVENT UPDATE: {mitigation_text}")
         
         await streamer.broadcast("Orchestrator", "Crisis resolved. Knowledge stored in VectorDB.", "success")
+
+        
         
         return {
+            "status": "Resolved & Participants Notified",
             "crisis_injected": crisis_desc, 
             "applied_solution": solution, 
             "new_schedule": new_schedule,

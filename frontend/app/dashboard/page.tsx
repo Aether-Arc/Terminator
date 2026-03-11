@@ -1,12 +1,11 @@
 "use client"
 import { useEffect, useState } from 'react';
-import { Calendar, Share2, Mail, BrainCircuit, Activity, AlertTriangle, ShieldCheck, Clock, Users, Database } from 'lucide-react';
+import { Calendar, Share2, Mail, BrainCircuit, Activity, AlertTriangle, ShieldCheck, Clock, Database } from 'lucide-react';
 
 export default function Dashboard() {
   const [results, setResults] = useState<any>(null);
 
   useEffect(() => {
-    // Read the finalized data from the swarm
     const saved = localStorage.getItem("swarmResult");
     if (saved) {
       setResults(JSON.parse(saved));
@@ -27,6 +26,38 @@ export default function Dashboard() {
   const schedule = results.schedule?.schedule || results.schedule || [];
   const emails = results.email_outreach_logs || results.emergency_emails_sent || [];
   const score = results.stability_score || 92.5;
+
+  // 🧠 CUSTOM MARKDOWN PARSER FOR VS CODE THEME
+  const formatMarkdown = (text: string) => {
+    if (!text) return <span className="text-gray-500 italic">No data available.</span>;
+    
+    return text.split('\n').map((line, i) => {
+      // Parse H1 and H2
+      if (line.startsWith('## ')) return <h2 key={i} className="text-vscode-blue font-bold text-lg mt-5 mb-2 border-b border-vscode-border/50 pb-1">{line.replace('## ', '')}</h2>;
+      if (line.startsWith('# ')) return <h1 key={i} className="text-vscode-purple font-bold text-xl mt-5 mb-3">{line.replace('# ', '')}</h1>;
+      
+      // Parse Bullet Points with inner bold text
+      if (line.startsWith('* ') || line.startsWith('- ')) {
+        const parts = line.substring(2).split(/(\*\*.*?\*\*)/g);
+        return (
+          <li key={i} className="ml-5 list-disc mb-1 text-gray-300">
+            {parts.map((p, j) => p.startsWith('**') ? <strong key={j} className="text-vscode-orange font-semibold">{p.replace(/\*\*/g, '')}</strong> : p)}
+          </li>
+        );
+      }
+      
+      // Parse regular paragraphs with inner bold text
+      if (line.trim() !== '') {
+        const parts = line.split(/(\*\*.*?\*\*)/g);
+        return (
+          <p key={i} className="mb-3 text-gray-300">
+            {parts.map((p, j) => p.startsWith('**') ? <strong key={j} className="text-vscode-orange font-semibold">{p.replace(/\*\*/g, '')}</strong> : p)}
+          </p>
+        );
+      }
+      return <br key={i} />; // Preserve line breaks
+    });
+  };
 
   return (
     <div className="h-full flex flex-col p-6 bg-[#1e1e1e] text-vscode-text font-mono overflow-y-auto relative">
@@ -58,11 +89,11 @@ export default function Dashboard() {
       <div className="grid grid-cols-12 gap-6 mb-6">
         
         {/* LEFT: Master Schedule (OR-Tools Output) */}
-        <div className="col-span-7 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-lg">
+        <div className="col-span-6 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-lg">
           <div className="bg-[#1e1e1e] border-b border-vscode-border p-3 text-xs flex items-center gap-2 uppercase tracking-wider font-bold">
             <Calendar size={14} className="text-vscode-blue" /> <span>Mathematical Schedule (OR-Tools)</span>
           </div>
-          <div className="p-4 overflow-y-auto h-80 space-y-3">
+          <div className="p-4 overflow-y-auto h-96 space-y-3">
             {Array.isArray(schedule) && schedule.length > 0 ? (
               schedule.map((item: any, i: number) => (
                 <div key={i} className="flex gap-4 p-3 bg-[#1e1e1e] border border-vscode-border rounded hover:border-vscode-blue transition-colors">
@@ -83,12 +114,13 @@ export default function Dashboard() {
         </div>
 
         {/* RIGHT: Marketing Assets (Gemini/ML) */}
-        <div className="col-span-5 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-lg">
+        <div className="col-span-6 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-lg">
           <div className="bg-[#1e1e1e] border-b border-vscode-border p-3 text-xs flex items-center gap-2 uppercase tracking-wider font-bold">
             <Share2 size={14} className="text-vscode-purple" /> <span>Social Assets & ML Timing</span>
           </div>
-          <div className="p-4 overflow-y-auto h-80 text-xs text-gray-300 whitespace-pre-wrap font-sans leading-relaxed bg-[#1e1e1e]">
-            {results.marketing || <span className="text-gray-500 italic">No marketing data available.</span>}
+          {/* THE FIX: We pass the raw string through our parser before rendering */}
+          <div className="p-6 overflow-y-auto h-96 text-sm font-sans bg-[#1e1e1e] leading-relaxed">
+            {formatMarkdown(results.marketing)}
           </div>
         </div>
 

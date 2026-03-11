@@ -19,7 +19,17 @@ class MarketingAgent:
         
         # 2. Get ML Prediction
         prediction = self.predictor.predict_best_time(days_until)
-        best_time = prediction["recommended_post_hour"]
+        best_time_data = self.predictor.predict_best_time(event_data['category'])
+        best_time = best_time_data['optimal_hour']
+        expected_reach = best_time_data['confidence_score']
+
+        # 2. Inject this into the LLM prompt
+        prompt = f"""
+        Generate a viral marketing campaign for: {event_data['name']}.
+        TECHNICAL CONSTRAINT: Our ML models predict peak engagement at {best_time}:00. 
+        The campaign MUST include a post scheduled for this exact time to maximize 
+        the expected reach of {expected_reach} users.
+        """
         expected_score = prediction["expected_engagement_score"]
 
         # 3. Inject ML data into the LLM prompt
