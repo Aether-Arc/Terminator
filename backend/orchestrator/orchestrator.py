@@ -48,7 +48,7 @@ class EventOrchestrator:
             await streamer.broadcast("CriticAgent", f"LLM Evaluating Plan {i+1}...", "thinking")
             
             # API PACING: 2-second delay to ensure we don't hit the 15 RPM burst limit
-            await asyncio.sleep(2) 
+            # await asyncio.sleep(2) 
             
             # 2. Critic LLM evaluates the plan's logic
             critic_review = await self.critic.review(plan.get("content", str(plan)))

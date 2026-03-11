@@ -1,11 +1,21 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
+# REMOVE THIS:
+# from langchain_google_genai import ChatGoogleGenerativeAI
+
+# ADD THIS:
+from langchain_openai import ChatOpenAI
+from config import OLLAMA_BASE_URL, OPENAI_API_KEY, AI_MODEL
 import json
 import asyncio
 
 class PlannerAgent:
     def __init__(self):
         # PROTECTION 1: Tell Langchain to auto-retry if it hits a 429 error
-        self.llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", max_retries=3)
+        self.llm = ChatOpenAI(
+            model=AI_MODEL,
+            base_url=OLLAMA_BASE_URL,
+            api_key=OPENAI_API_KEY,
+            temperature=0.2 # Crucial: Keep this low so Gemma outputs strict JSON
+        )
 
     async def generate_plan(self, event_data):
         event_name = event_data.get('name', 'Hackathon')
@@ -75,7 +85,7 @@ class PlannerAgent:
                 
             # PROTECTION 2: Pacing. Wait 3.5 seconds before asking Gemini for the next plan.
             # This completely avoids the "Burst" API rate limit.
-            if i < count - 1:
-                await asyncio.sleep(3.5)
+            # if i < count - 1:
+            #     await asyncio.sleep(3.5)
                 
         return plans
