@@ -1,4 +1,7 @@
 import asyncio
+import uuid
+import sqlite3
+import os
 from agents.planner_agent import PlannerAgent
 from agents.scheduler_agent import SchedulerAgent
 from agents.marketing_agent import MarketingAgent
@@ -54,11 +57,31 @@ class EventOrchestrator:
             self.sponsor
         )
 
-    async def plan_event(self, event_data, streamer):
+    def get_thread_history(self):
+        """Scans the SQLite database to find all historical chat/event threads."""
+        db_path = os.path.join(os.getcwd(), "memory", "swarm_threads.sqlite")
+        if not os.path.exists(db_path): 
+            return []
+            
+        try:
+            with sqlite3.connect(db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT DISTINCT thread_id FROM checkpoints")
+                rows = cursor.fetchall()
+                # Return the list of unique thread IDs
+                return [row[0] for row in rows]
+        except Exception as e:
+            print(f"DB Read Error: {e}")
+            return []
+
+    async def plan_event(self, event_data, streamer, thread_id=None):
         await streamer.broadcast("Orchestrator", "Initializing Swarm Sequence...", "thinking")
+
+        if not thread_id:
+            thread_id = f"evt_{str(uuid.uuid4())[:8]}"
         
         # Thread ID tells LangGraph exactly where to store this event's memory
-        self.thread_config = {"configurable": {"thread_id": "event_thread_1"}}
+        self.thread_config = {"configurable": {"thread_id": thread_id}}
         
         initial_state = {
             "event_data": event_data,
@@ -79,11 +102,47 @@ class EventOrchestrator:
         
         # FIX: final_state is a dict, so we use .get() directly on it!
         return {
+            "thread_id": thread_id,
             "workflow_executed": True,
             "selected_plan": final_state.get("plan"),
             "schedule": final_state.get("schedule"),
             "requires_approval": final_state.get("requires_approval"),
             "stability_score": final_state.get("score")
+        }
+    
+    async def fork_and_update(self, thread_id, new_prompt, streamer):
+        """Rewinds time, injects a new user prompt, and forces the Swarm to replan."""
+        self.thread_config = {"configurable": {"thread_id": thread_id}}
+        await streamer.broadcast("Orchestrator", f"TIME TRAVEL INITIATED: Rewinding state for {thread_id}...", "warning")
+        
+        # 1. Fetch the frozen state from the SQLite hard drive
+        current_state = self.graph.get_state(self.thread_config)
+        event_data = current_state.values.get("event_data", {})
+        
+        # 2. Inject the user's new prompt/constraint into the event memory
+        event_data["marketing_prompt"] = event_data.get("marketing_prompt", "") + f" \nNEW ORGANIZER CONSTRAINT: {new_prompt}"
+        
+        # 3. STATE SPOOFING: We update the state *acting as the Critic Node*. 
+        # By setting the score to 0, LangGraph's conditional edge is forced to route BACK to the Planner!
+        self.graph.update_state(
+            self.thread_config,
+            {"event_data": event_data, "score": 0, "iterations": 0},
+            as_node="critic"
+        )
+        
+        await streamer.broadcast("CriticAgent", f"Applying new constraint: '{new_prompt}'. Routing back to Planner.", "simulating")
+        
+        # 4. Resume execution from the newly forked past
+        async for event in self.graph.astream(None, config=self.thread_config):
+            for node_name, state_update in event.items():
+                await streamer.broadcast(node_name.capitalize(), "Autonomously replanning...", "simulating")
+                
+        final_state = self.graph.get_state(self.thread_config)
+        return {
+            "status": "forked_and_replanned",
+            "schedule": final_state.values.get("schedule", []),
+            "requires_approval": True,
+            "stability_score": final_state.values.get("score", 0)
         }
 
     async def approve_plan(self, event_data, streamer):
@@ -243,6 +302,8 @@ class EventOrchestrator:
             "marketing": final_state.values.get("marketing_copy", ""),
             "agent_outputs": agent_outputs
         }
+    
+    
 
     async def handle_crisis(self, crisis_data, streamer, crisis_event):
         crisis_desc = crisis_data.get('description', 'Unknown anomaly detected.')

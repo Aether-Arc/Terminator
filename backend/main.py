@@ -11,6 +11,11 @@ from memory.redis_memory import store_state, get_state
 from memory.vector_store import store_memory, search_memory
 from langchain_openai import ChatOpenAI
 from config import LOCAL_MODEL, OLLAMA_BASE_URL, OPENAI_API_KEY
+from pydantic import BaseModel
+
+class ForkRequest(BaseModel):
+    thread_id: str
+    new_prompt: str
 
 def run_diagnostics():
     print("\n" + "⚙️ "*20)
@@ -130,5 +135,43 @@ async def resume_crashed_event():
         # We reuse the global orchestrator and streamer
         result = await orchestrator.resume_event(swarm_streamer)
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/history")
+async def get_history():
+    threads = orchestrator.get_thread_history()
+    return {"threads": threads}
+
+@app.post("/fork_event")
+async def fork_event(req: ForkRequest):
+    try:
+        result = await orchestrator.fork_and_update(req.thread_id, req.new_prompt, swarm_streamer)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/thread/{thread_id}")
+async def get_thread_state(thread_id: str):
+    try:
+        # 1. Point LangGraph to the specific SQLite thread
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # 2. Fetch the frozen state from the hard drive
+        state = orchestrator.graph.get_state(config)
+        
+        if not state.values:
+            raise HTTPException(status_code=404, detail="Thread not found")
+            
+        # 3. Check if the graph is currently paused waiting for human approval
+        is_waiting = len(state.next) > 0
+        
+        return {
+            "schedule": state.values.get("schedule", []),
+            "marketing": state.values.get("marketing_copy", ""),
+            "email_logs": state.values.get("email_logs", []),
+            "requires_approval": is_waiting,
+            "status": "AWAITING_APPROVAL" if is_waiting else "COMPLETED"
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
