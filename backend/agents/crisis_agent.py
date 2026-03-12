@@ -1,11 +1,11 @@
 from langchain_openai import ChatOpenAI
-from config import OLLAMA_BASE_URL, OPENAI_API_KEY, AI_MODEL
+from config import OLLAMA_BASE_URL, OPENAI_API_KEY, CLOUD_MODEL
 import json
 
 class CrisisAgent:
     def __init__(self):
         self.llm = ChatOpenAI(
-            model=AI_MODEL,
+            model=CLOUD_MODEL,
             base_url=OLLAMA_BASE_URL,
             api_key=OPENAI_API_KEY,
             temperature=0.2 

@@ -1,13 +1,13 @@
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
-from config import OLLAMA_BASE_URL, OPENAI_API_KEY, AI_MODEL
+from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
 from tools.system_tools import swarm_tools
 import json
 
 class SponsorAgent:
     def __init__(self):
         self.llm = ChatOpenAI(
-            model=AI_MODEL,
+            model=LOCAL_MODEL,
             base_url=OLLAMA_BASE_URL,
             api_key=OPENAI_API_KEY,
             temperature=0.5

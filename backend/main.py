@@ -10,7 +10,7 @@ from realtime.websocket_stream import swarm_streamer
 from memory.redis_memory import store_state, get_state
 from memory.vector_store import store_memory, search_memory
 from langchain_openai import ChatOpenAI
-from config import AI_MODEL, OLLAMA_BASE_URL, OPENAI_API_KEY
+from config import LOCAL_MODEL, OLLAMA_BASE_URL, OPENAI_API_KEY
 
 def run_diagnostics():
     print("\n" + "⚙️ "*20)
@@ -41,17 +41,17 @@ def run_diagnostics():
     # 3. Test LLM Engine (Ollama)
     try:
         llm = ChatOpenAI(
-            model=AI_MODEL,
+            model=LOCAL_MODEL,
             base_url=OLLAMA_BASE_URL,
             api_key=OPENAI_API_KEY,
             max_tokens=10, # Keep it extremely short for speed
             temperature=0
         )
-        print(f"[*] Waking up {AI_MODEL} (this may take a few seconds on first run)...")
+        print(f"[*] Waking up {LOCAL_MODEL} (this may take a few seconds on first run)...")
         response = llm.invoke("Respond with exactly one word: 'Ready'.")
         
         if response and response.content:
-            print(f"✅ AI MODEL:       ONLINE & Responding ({AI_MODEL})")
+            print(f"✅ AI MODEL:       ONLINE & Responding ({LOCAL_MODEL})")
             print(f"   [Model Output]: '{response.content.strip()}'")
         else:
             print("❌ AI MODEL:       FAILED TO GENERATE TEXT")

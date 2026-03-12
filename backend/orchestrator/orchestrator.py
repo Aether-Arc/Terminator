@@ -117,21 +117,48 @@ class EventOrchestrator:
             self.graph.update_state(self.thread_config, {"event_data": event_data})
             await streamer.broadcast("Orchestrator", f"Organizer requested dynamic injection of: {new_agents_requested}.", "warning")
 
-        # 2. SEAMLESS AUTONOMOUS HANDOFF (Queue Execution)
-        # By passing 'None', we tell the graph to resume from the pause point.
-        async for event in self.graph.astream(None, config=self.thread_config):
-            for node_name, state_update in event.items():
-                if node_name == "supervisor":
-                    await streamer.broadcast("SupervisorAgent", f"Dynamically queued execution agents.", "thinking")
-                elif node_name in ["marketing", "email", "budget", "volunteer", "attendance_ml", "sponsor"]:
-                    await streamer.broadcast(node_name.capitalize(), f"Autonomously executing task...", "simulating")
+        # 2. TRUE PARALLEL ASYNC EXECUTION (Hybrid Swarm Speedup)
+        # We bypass the sequential LangGraph router here and fire all local agents simultaneously
+        await streamer.broadcast("SupervisorAgent", "Dynamically firing local GPU agents in parallel...", "thinking")
         
-        # Fetch the final results from the shared memory state
-        final_state = self.graph.get_state(self.thread_config)
-        marketing_assets = final_state.values.get("marketing_copy", "")
-        email_logs = final_state.values.get("email_logs", [])
-        final_schedule = final_state.values.get("schedule", [])
-        agent_outputs = final_state.values.get("agent_outputs", {})
+        # Fetch current state
+        current_state = self.graph.get_state(self.thread_config).values
+        evt_data = current_state.get("event_data", event_data)
+        final_schedule = current_state.get("schedule", [])
+        evt_data["schedule"] = final_schedule # Marketing needs this injected
+        
+        # Broadcast active execution UI
+        for agent_node in ["marketing", "budget", "volunteer", "sponsor", "email", "attendance_ml"]:
+            await streamer.broadcast(agent_node.capitalize(), "Autonomously executing task in parallel...", "simulating")
+
+        # Fire all local GPU tasks at the exact same time
+        marketing_task = self.marketing.generate_campaign(evt_data)
+        budget_task = self.budget.calculate(evt_data)
+        volunteer_task = self.volunteer.assign_shifts(evt_data, final_schedule)
+        sponsor_task = self.sponsor.draft_sponsorships(evt_data)
+        
+        # Gather async results simultaneously
+        marketing_assets, budget_res, volunteer_res, sponsor_res = await asyncio.gather(
+            marketing_task, budget_task, volunteer_task, sponsor_task
+        )
+        
+        # Run synchronous models (Email & ML predictors)
+        email_logs = self.email.send_invites(evt_data.get("csv_content", ""), "Your optimal schedule is locked!")
+        attendance_forecast = self.attendance_ml.predict_attendance(evt_data.get("expected_crowd", 500))
+        
+        agent_outputs = {
+            "budget": budget_res,
+            "volunteer": volunteer_res,
+            "sponsor": sponsor_res,
+            "attendance_forecast": attendance_forecast
+        }
+        
+        # Save final execution state back to graph memory
+        self.graph.update_state(self.thread_config, {
+            "marketing_copy": marketing_assets,
+            "email_logs": email_logs,
+            "agent_outputs": agent_outputs
+        })
         
         # 3. SELF-IMPROVEMENT LOOP
         event_name = event_data.get("name", "Unknown Event")

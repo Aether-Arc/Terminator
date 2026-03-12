@@ -32,7 +32,7 @@ export default function AgentMonitor({ logs }: { logs: any[] }) {
             <span className="text-vscode-blue font-bold">{log.agent}</span>: 
           </div>
           <div className={`ml-4 ${getColor(log.status)}`}>
-             {log.message}
+             {log.action}
           </div>
         </div>
       ))}
