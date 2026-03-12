@@ -103,3 +103,23 @@ async def crisis(data: dict):
 @app.get("/status")
 def status():
     return {"system": "EventOS DeepMind Swarm running"}
+
+@app.post("/manual_override")
+async def manual_override(data: dict):
+    """
+    Accepts payload like:
+    {
+        "override_type": "edit_schedule",
+        "new_schedule": [{"session": "Lunch", "start": "12:00 PM", "end": "1:00 PM"}],
+        "csv_content": "name,email\nTest,test@test.com"
+    }
+    OR
+    {
+        "override_type": "custom_crisis",
+        "description": "The internet went down in the main hall!",
+        "expected_crowd": 500,
+        "csv_content": "name,email\nTest,test@test.com"
+    }
+    """
+    result = await orchestrator.manual_override(data, swarm_streamer)
+    return result

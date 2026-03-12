@@ -15,3 +15,5 @@ sqlalchemy
 psycopg2-binary
 scikit-learn
 networkx
+duckduckgo-search
+langchain-community

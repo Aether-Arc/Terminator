@@ -1,17 +1,34 @@
+from langchain_openai import ChatOpenAI
+from config import OLLAMA_BASE_URL, OPENAI_API_KEY, AI_MODEL
+import json
+
 class VolunteerAgent:
-    def assign_shifts(self, expected_crowd):
-        base_volunteers = 10
-        extra_volunteers = expected_crowd // 50  # 1 extra per 50 people
+    def __init__(self):
+        self.llm = ChatOpenAI(model=AI_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0.3)
+
+    async def assign_shifts(self, event_data, schedule):
+        crowd = event_data.get("expected_crowd", 500)
         
-        total_needed = base_volunteers + extra_volunteers
+        prompt = f"""
+        You are the Volunteer Coordinator for an event of {crowd} people.
+        Here is the locked mathematical schedule:
+        {json.dumps(schedule, indent=2)}
         
-        shifts = {
-            "Morning (8AM - 2PM)": total_needed,
-            "Afternoon (2PM - 8PM)": total_needed,
-            "Night Hack (8PM - 8AM)": total_needed // 2 
-        }
+        Analyze the schedule. Some sessions (like Lunch or Registration) require massive crowd control. Other sessions (like Keynotes) require AV support.
         
-        return {
-            "total_volunteers_needed": total_needed,
-            "shift_distribution": shifts
-        }
+        Assign specific volunteer shifts and roles tailored EXACTLY to the timeline above.
+        
+        Respond ONLY in valid JSON format:
+        {{
+            "total_volunteers_required": 45,
+            "roles": [
+                {{"role_name": "Registration Desk", "headcount": 10, "active_time": "8:00 AM - 10:00 AM", "reason": "High traffic at start"}}
+            ]
+        }}
+        """
+        response = await self.llm.ainvoke(prompt)
+        try:
+            clean_json = response.content.replace("```json", "").replace("```", "").strip()
+            return json.loads(clean_json)
+        except:
+            return {"total_volunteers_required": crowd // 20, "roles": ["General Support"]}

@@ -8,38 +8,29 @@ class MarketingAgent:
             model=AI_MODEL,
             base_url=OLLAMA_BASE_URL,
             api_key=OPENAI_API_KEY,
-            temperature=0.2 
+            temperature=0.4 # Slightly higher for creative marketing copy
         )
-        # 1. Initialize the ML Model
+        # Initialize the actual ML Predictor
         self.predictor = EngagementPredictor()
 
-    async def generate_campaign(self, event):
-        event_name = event.get('name', 'the upcoming event')
-        days_until = event.get('days_until_event', 14) # Default to 14 days out
+    async def generate_campaign(self, event_data):
+        event_name = event_data.get('name', 'the upcoming event')
+        days_until = event_data.get('days_until_event', 14)
         
-        # 2. Get ML Prediction
+        # 1. Dynamically get ML Predictions
         prediction = self.predictor.predict_best_time(days_until)
-        best_time_data = self.predictor.predict_best_time(event_data['category'])
-        best_time = best_time_data['optimal_hour']
-        expected_reach = best_time_data['confidence_score']
+        best_time = prediction.get("recommended_post_hour", "12:00")
+        expected_score = prediction.get("expected_engagement_score", 0)
 
-        # 2. Inject this into the LLM prompt
+        # 2. Inject real ML data into the LLM context
         prompt = f"""
-        Generate a viral marketing campaign for: {event_data['name']}.
-        TECHNICAL CONSTRAINT: Our ML models predict peak engagement at {best_time}:00. 
-        The campaign MUST include a post scheduled for this exact time to maximize 
-        the expected reach of {expected_reach} users.
-        """
-        expected_score = prediction["expected_engagement_score"]
-
-        # 3. Inject ML data into the LLM prompt
-        prompt = f"""
-        Create a social media campaign for {event_name}.
-        Include LinkedIn, Twitter and Instagram posts.
+        You are an elite Growth Hacker. Create a viral social media campaign for '{event_name}'.
+        Include specific copy for LinkedIn, Twitter, and Instagram.
         
-        CRITICAL DATA: Our Machine Learning model predicts the highest engagement score ({expected_score}) 
-        will occur if we release these posts at {best_time}. You MUST explicitly mention this posting strategy 
-        and time in your campaign plan.
+        CRITICAL ML INTELLIGENCE: Our EngagementPredictor model forecasts peak virality (Score: {expected_score}/200) 
+        if the primary announcements are deployed exactly at {best_time}. 
+        
+        You MUST explicitly build the timeline around this posting strategy and mention the time in your internal plan.
         """
         response = await self.llm.ainvoke(prompt)
         return response.content

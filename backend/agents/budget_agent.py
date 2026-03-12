@@ -1,25 +1,35 @@
+from langchain_openai import ChatOpenAI
+from config import OLLAMA_BASE_URL, OPENAI_API_KEY, AI_MODEL
+import json
+
 class BudgetAgent:
     def __init__(self):
-        self.total_budget = 50000 
-        self.allocated = 0
+        self.llm = ChatOpenAI(model=AI_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0.2)
+        self.baseline_budget = 50000
 
-    def calculate_costs(self, event_data, predicted_attendance):
-        food_cost_per_person = 15
-        venue_base_cost = 10000
-        swag_cost = 10 * predicted_attendance
+    async def calculate(self, event_data):
+        crowd = event_data.get("expected_crowd", 500)
+        venue = event_data.get("venue", "Convention Center")
         
-        total_food = food_cost_per_person * predicted_attendance
-        total_expense = total_food + venue_base_cost + swag_cost
+        prompt = f"""
+        You are the Chief Financial Officer (CFO) for an event.
+        - Crowd: {crowd} people
+        - Location/Style: {venue}
+        - Total Available Budget: ${self.baseline_budget}
         
-        status = "Under Budget" if total_expense <= self.total_budget else "OVER BUDGET CRISIS"
+        Generate a highly realistic, itemized budget breakdown. You must factor in hidden costs (insurance, WiFi scaling, AV equipment).
         
-        return {
-            "total_budget": self.total_budget,
-            "projected_expense": total_expense,
-            "breakdown": {
-                "food": total_food,
-                "venue": venue_base_cost,
-                "swag": swag_cost
-            },
-            "status": status
-        }
+        Respond ONLY in valid JSON format:
+        {{
+            "total_projected_cost": 48000,
+            "status": "Under Budget",
+            "line_items": [
+                {{"category": "Catering", "cost": 15000, "notes": "$30 per head for 500 people"}}
+            ]
+        }}
+        """
+        response = await self.llm.ainvoke(prompt)
+        try:
+            return json.loads(response.content.replace("```json", "").replace("```", "").strip())
+        except:
+            return {"total_projected_cost": self.baseline_budget, "status": "Unknown", "line_items": []}
