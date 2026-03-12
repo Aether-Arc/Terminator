@@ -11,10 +11,10 @@ class ReflectionLoop:
         
         review_tasks = []
         for i, (plan, metrics) in enumerate(zip(candidates, sim_metrics)):
-            combined_context = f"PROPOSED FUTURE {i+1}:\n{str(plan)}\n\nPHYSICS SIMULATION:\n{str(metrics)}"
-            review_tasks.append(self.critic.review(combined_context))
+            # 🚀 FIX: Pass the two distinct arguments to the Critic review method
+            review_tasks.append(self.critic.review(plan, metrics))
             
-        # This executes them sequentially to respect Ollama Cloud's concurrency limits
+        # This executes them sequentially to respect API limits
         reviews = []
         for task in review_tasks:
             reviews.append(await task)

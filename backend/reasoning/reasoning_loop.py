@@ -9,8 +9,8 @@ class CognitiveLoop:
     async def generate_optimal_plan(self, event_data, streamer):
         await streamer.broadcast("PlannerAgent", "Generating candidate strategies...", "thinking")
         
-        # 1. Generate multiple varied plans (Tree Search approach)
-        candidates = self.planner.generate_multiple_plans(event_data, count=3)
+        # 🚀 FIX: Added `await` because generate_multiple_plans is an async function
+        candidates = await self.planner.generate_multiple_plans(event_data, count=3)
         
         best_plan = None
         highest_score = -1
@@ -24,7 +24,10 @@ class CognitiveLoop:
             
             # 3. Critic evaluates the simulation
             await streamer.broadcast("CriticAgent", f"Evaluating friction points for Plan {i+1}...", "thinking")
-            score = self.critic.evaluate(simulation_results)
+            
+            # 🚀 FIX: Added `await` and passed the two correct arguments to `review`
+            review_result = await self.critic.review(plan, simulation_results)
+            score = review_result.get("score", 0)
             
             if score > highest_score:
                 highest_score = score
