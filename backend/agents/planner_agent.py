@@ -72,7 +72,9 @@ class PlannerAgent:
             """
             tasks.append(self._generate_single_branch(prompt, i))
             
-        print(f"[*] Waking up ReAct Agent. Firing {count} parallel planning branches with Tool Access...")
-        plans = await asyncio.gather(*tasks)
+        print(f"[*] Waking up ReAct Agent. Firing {count} sequential planning branches to respect cloud limits...")
+        plans = []
+        for task in tasks:
+            plans.append(await task)
         
         return list(plans)

@@ -14,7 +14,10 @@ class ReflectionLoop:
             combined_context = f"PROPOSED FUTURE {i+1}:\n{str(plan)}\n\nPHYSICS SIMULATION:\n{str(metrics)}"
             review_tasks.append(self.critic.review(combined_context))
             
-        reviews = await asyncio.gather(*review_tasks)
+        # This executes them sequentially to respect Ollama Cloud's concurrency limits
+        reviews = []
+        for task in review_tasks:
+            reviews.append(await task)
         
         best_score = -1
         best_plan = None

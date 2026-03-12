@@ -123,3 +123,12 @@ async def manual_override(data: dict):
     """
     result = await orchestrator.manual_override(data, swarm_streamer)
     return result
+
+@app.post("/resume_event")
+async def resume_crashed_event():
+    try:
+        # We reuse the global orchestrator and streamer
+        result = await orchestrator.resume_event(swarm_streamer)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

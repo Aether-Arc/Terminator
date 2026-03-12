@@ -205,6 +205,44 @@ class EventOrchestrator:
             return await self.handle_crisis(override_data, streamer, "manual_trigger")
             
         return {"error": "Unknown override type."}
+    
+    async def resume_event(self, streamer):
+        """Pulls the exact state from SQLite and resumes execution after a server crash."""
+        await streamer.broadcast("Orchestrator", "CRASH RECOVERY INITIATED: Loading SQLite Checkpoint...", "warning")
+        
+        # We target the exact same thread we used before
+        self.thread_config = {"configurable": {"thread_id": "event_thread_1"}}
+        
+        # 1. Inspect the saved state before we start
+        saved_state = self.graph.get_state(self.thread_config)
+        next_agent = saved_state.next # LangGraph tells us exactly who is next in line!
+        
+        if not next_agent:
+            await streamer.broadcast("Orchestrator", "Thread is already fully completed. Nothing to resume.", "idle")
+            return {"status": "completed"}
+
+        await streamer.broadcast("Orchestrator", f"Found saved state! Resuming execution at: {next_agent[0].capitalize()}", "success")
+        
+        # 2. Pass 'None' to instantly resume the graph from the exact point of failure
+        async for event in self.graph.astream(None, config=self.thread_config):
+            for node_name, state_update in event.items():
+                if node_name == "supervisor":
+                    await streamer.broadcast("SupervisorAgent", "Dynamically firing local GPU agents in parallel...", "thinking")
+                else:
+                    await streamer.broadcast(node_name.capitalize(), "Autonomously executing task...", "simulating")
+
+        # 3. Fetch the recovered final results
+        final_state = self.graph.get_state(self.thread_config)
+        agent_outputs = final_state.values.get("agent_outputs", {})
+        
+        await streamer.broadcast("Orchestrator", "Recovery successful. All operations completed.", "idle")
+        
+        return {
+            "status": "recovered_and_completed",
+            "schedule": final_state.values.get("schedule", []),
+            "marketing": final_state.values.get("marketing_copy", ""),
+            "agent_outputs": agent_outputs
+        }
 
     async def handle_crisis(self, crisis_data, streamer, crisis_event):
         crisis_desc = crisis_data.get('description', 'Unknown anomaly detected.')

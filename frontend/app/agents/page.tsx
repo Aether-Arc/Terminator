@@ -20,7 +20,11 @@ export default function AgentsPage() {
   
   const ws = useRef<WebSocket | null>(null)
 
+  const hasFired = useRef(false);
+
   useEffect(() => {
+    if (hasFired.current) return; // 2. If already fired, stop here!
+    hasFired.current = true;      // 3. Mark as fired
     // 1. Connect to Swarm Live Stream (WebSocket)
     ws.current = new WebSocket("ws://localhost:8000/ws/swarm")
     ws.current.onmessage = (event) => {
