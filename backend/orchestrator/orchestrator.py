@@ -77,12 +77,13 @@ class EventOrchestrator:
         
         await streamer.broadcast("Orchestrator", "Schedule Drafted. Pausing Swarm for Human Approval.", "warning")
         
+        # FIX: final_state is a dict, so we use .get() directly on it!
         return {
             "workflow_executed": True,
-            "selected_plan": final_state.values.get("plan"),
-            "schedule": final_state.values.get("schedule"),
-            "requires_approval": final_state.values.get("requires_approval"),
-            "stability_score": final_state.values.get("score")
+            "selected_plan": final_state.get("plan"),
+            "schedule": final_state.get("schedule"),
+            "requires_approval": final_state.get("requires_approval"),
+            "stability_score": final_state.get("score")
         }
 
     async def approve_plan(self, event_data, streamer):
