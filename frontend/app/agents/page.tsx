@@ -74,7 +74,8 @@ export default function AgentsPage() {
         schedule: schedule,
         marketing: result.marketing,
         email_outreach_logs: result.email_outreach_logs,
-        stability_score: score || 95.2
+        stability_score: score || 95.2,
+        agent_outputs: result.agent_outputs || {} // New Modular Outputs
       }
       localStorage.setItem("swarmResult", JSON.stringify(finalManifest))
       

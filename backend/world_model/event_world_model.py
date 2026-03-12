@@ -28,7 +28,7 @@ class WorldModelAgent:
         crowd_size = event_data.get("expected_crowd", 500)
         
         # 1. Random Chaos Injection
-        stochastic_event = self.simulator.simulate_delay()
+        stochastic_event = self.simulator.delay_sim.simulate_stochastic_delay()
         chaos_delay = stochastic_event["delay_minutes"]
         
         # 2. Spatial Bottleneck Calculation

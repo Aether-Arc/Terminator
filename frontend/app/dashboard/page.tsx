@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useState } from 'react';
-import { Calendar, Share2, Mail, BrainCircuit, Activity, AlertTriangle, ShieldCheck, Clock, Database } from 'lucide-react';
+import { Calendar, Share2, Mail, BrainCircuit, Activity, AlertTriangle, ShieldCheck, Clock, Database, Users, DollarSign, Briefcase } from 'lucide-react';
 
 export default function Dashboard() {
   const [results, setResults] = useState<any>(null);
@@ -26,17 +26,16 @@ export default function Dashboard() {
   const schedule = results.schedule?.schedule || results.schedule || [];
   const emails = results.email_outreach_logs || results.emergency_emails_sent || [];
   const score = results.stability_score || 92.5;
+  const outputs = results.agent_outputs || {};
 
   // 🧠 CUSTOM MARKDOWN PARSER FOR VS CODE THEME
   const formatMarkdown = (text: string) => {
     if (!text) return <span className="text-gray-500 italic">No data available.</span>;
     
     return text.split('\n').map((line, i) => {
-      // Parse H1 and H2
       if (line.startsWith('## ')) return <h2 key={i} className="text-vscode-blue font-bold text-lg mt-5 mb-2 border-b border-vscode-border/50 pb-1">{line.replace('## ', '')}</h2>;
       if (line.startsWith('# ')) return <h1 key={i} className="text-vscode-purple font-bold text-xl mt-5 mb-3">{line.replace('# ', '')}</h1>;
       
-      // Parse Bullet Points with inner bold text
       if (line.startsWith('* ') || line.startsWith('- ')) {
         const parts = line.substring(2).split(/(\*\*.*?\*\*)/g);
         return (
@@ -46,7 +45,6 @@ export default function Dashboard() {
         );
       }
       
-      // Parse regular paragraphs with inner bold text
       if (line.trim() !== '') {
         const parts = line.split(/(\*\*.*?\*\*)/g);
         return (
@@ -55,7 +53,7 @@ export default function Dashboard() {
           </p>
         );
       }
-      return <br key={i} />; // Preserve line breaks
+      return <br key={i} />;
     });
   };
 
@@ -71,9 +69,15 @@ export default function Dashboard() {
           </h1>
           <p className="text-xs text-gray-400 mt-1">Generated autonomously by EventOS Multi-Agent Swarm</p>
         </div>
-        <div className="text-right">
-          <div className="text-[10px] text-vscode-yellow uppercase tracking-widest">System Confidence Score</div>
-          <div className="text-3xl text-vscode-green font-bold">{score.toFixed(1)}%</div>
+        <div className="text-right flex gap-8">
+          <div>
+            <div className="text-[10px] text-vscode-yellow uppercase tracking-widest">Attendance Forecast (ML)</div>
+            <div className="text-3xl text-vscode-blue font-bold">{outputs.attendance_forecast || "N/A"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-vscode-yellow uppercase tracking-widest">System Confidence Score</div>
+            <div className="text-3xl text-vscode-green font-bold">{score.toFixed(1)}%</div>
+          </div>
         </div>
       </div>
 
@@ -83,6 +87,66 @@ export default function Dashboard() {
         <MetricCard icon={<Mail />} title="Emails Processed" value={emails.length} color="text-vscode-orange" />
         <MetricCard icon={<Activity />} title="Crises Handled" value={results.crisis_injected ? 1 : 0} color="text-red-400" />
         <MetricCard icon={<BrainCircuit />} title="RL Policy Updates" value="+1 (Optimized)" color="text-vscode-purple" />
+      </div>
+
+      {/* NEW ROW: Modular Agent Outputs */}
+      <div className="grid grid-cols-3 gap-6 mb-6">
+        {/* BUDGET AGENT */}
+        <div className="bg-[#252526] border border-vscode-border rounded p-4 shadow-lg flex flex-col max-h-64 overflow-y-auto">
+          <h3 className="text-vscode-green text-xs font-bold uppercase flex items-center gap-2 mb-3"><DollarSign size={14}/> Financial Analysis</h3>
+          {outputs.budget ? (
+            <div>
+              <div className="text-2xl text-white font-bold mb-1">${outputs.budget.total_projected_cost?.toLocaleString()}</div>
+              <div className="text-[10px] text-gray-400 mb-3">Status: <span className="text-vscode-green">{outputs.budget.status}</span></div>
+              <div className="text-xs text-gray-300 space-y-1">
+                {outputs.budget.line_items?.map((item:any, i:number) => (
+                  <div key={i} className="flex justify-between border-b border-vscode-border/50 pb-1 pt-1">
+                    <span>{item.category}</span>
+                    <span className="text-vscode-orange">${item.cost}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : <span className="text-xs text-gray-600">Budget Agent not queued.</span>}
+        </div>
+
+        {/* VOLUNTEER AGENT */}
+        <div className="bg-[#252526] border border-vscode-border rounded p-4 shadow-lg flex flex-col max-h-64 overflow-y-auto">
+          <h3 className="text-vscode-blue text-xs font-bold uppercase flex items-center gap-2 mb-3"><Users size={14}/> Logistics & Staffing</h3>
+          {outputs.volunteer ? (
+            <div>
+              <div className="text-2xl text-white font-bold mb-1">{outputs.volunteer.total_volunteers_required} <span className="text-sm text-gray-400 font-normal">staff req.</span></div>
+              <div className="text-xs text-gray-300 space-y-2 mt-3">
+                {outputs.volunteer.roles?.map((role:any, i:number) => (
+                  <div key={i} className="p-2 bg-[#1e1e1e] rounded border border-vscode-border">
+                    <div className="font-bold text-vscode-blue">{role.role_name} ({role.headcount} ppl)</div>
+                    <div className="text-[10px] text-gray-400">{role.active_time}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : <span className="text-xs text-gray-600">Volunteer Agent not queued.</span>}
+        </div>
+
+        {/* SPONSOR AGENT */}
+        <div className="bg-[#252526] border border-vscode-border rounded p-4 shadow-lg flex flex-col max-h-64 overflow-y-auto">
+          <h3 className="text-vscode-purple text-xs font-bold uppercase flex items-center gap-2 mb-3"><Briefcase size={14}/> Corporate Outreach</h3>
+          {outputs.sponsor ? (
+            <div className="text-xs">
+              <div className="font-bold text-gray-400 mb-2 border-b border-vscode-border/50 pb-1">Target Tiers:</div>
+              {outputs.sponsor.tiers?.map((tier:any, i:number) => (
+                <div key={i} className="mb-1"><span className="text-vscode-orange">{tier.name}</span>: {tier.price}</div>
+              ))}
+              <div className="font-bold text-gray-400 mt-4 mb-2 border-b border-vscode-border/50 pb-1">Live Web-Searched Targets:</div>
+              {outputs.sponsor.target_sponsors?.map((s:any, i:number) => (
+                <div key={i} className="mb-2 p-2 bg-[#1e1e1e] border-l-2 border-vscode-purple">
+                  <div className="font-bold text-white">{s.company}</div>
+                  <div className="text-[10px] text-gray-400 mt-1 italic">"{s.pitch}"</div>
+                </div>
+              ))}
+            </div>
+          ) : <span className="text-xs text-gray-600">Sponsor Agent not queued.</span>}
+        </div>
       </div>
 
       {/* MIDDLE ROW: Schedule & Marketing */}
@@ -118,7 +182,6 @@ export default function Dashboard() {
           <div className="bg-[#1e1e1e] border-b border-vscode-border p-3 text-xs flex items-center gap-2 uppercase tracking-wider font-bold">
             <Share2 size={14} className="text-vscode-purple" /> <span>Social Assets & ML Timing</span>
           </div>
-          {/* THE FIX: We pass the raw string through our parser before rendering */}
           <div className="p-6 overflow-y-auto h-96 text-sm font-sans bg-[#1e1e1e] leading-relaxed">
             {formatMarkdown(results.marketing)}
           </div>
