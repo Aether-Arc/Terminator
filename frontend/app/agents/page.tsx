@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createEvent, approvePlan, simulateCrisis, fetchHistory, forkEvent, fetchThreadState } from '../../lib/api'
 import AgentMonitor from '../../components/AgentMonitor'
 import MonteCarloChart from '../../components/MonteCarloChart'
+import PipelineTracker, { NodeStatus } from '../../components/PipelineTracker' // 🚀 INJECTED PIPELINE TRACKER
 import { Play, CheckCircle, AlertTriangle, FastForward, Server, Mail, Calendar, Share2, MessageSquare, History, Send, Plus, Edit3 } from 'lucide-react'
 
 export default function AgentsPage() {
@@ -19,9 +20,13 @@ export default function AgentsPage() {
   const [chatInput, setChatInput] = useState("")
   const [simMetrics, setSimMetrics] = useState<any>(null)
 
+  // 🚀 LangGraph Telemetry State
+  const [nodeStatuses, setNodeStatuses] = useState<Record<string, NodeStatus>>({})
+  const [activeLogs, setActiveLogs] = useState<Record<string, string>>({})
+
   // Results State
-  const [schedule, setSchedule] = useState<any>(null) // Keeps raw object for reference
-  const [scheduleStr, setScheduleStr] = useState<string>("") // 🚀 For the Editable Textarea
+  const [schedule, setSchedule] = useState<any>(null) 
+  const [scheduleStr, setScheduleStr] = useState<string>("") 
   const [marketing, setMarketing] = useState<string>("")
   const [emailLogs, setEmailLogs] = useState<any[]>([])
   const [score, setScore] = useState<number>(0)
@@ -42,7 +47,38 @@ export default function AgentsPage() {
     ws.current = new WebSocket("ws://localhost:8000/ws/swarm")
     ws.current.onmessage = (event) => {
       const data = JSON.parse(event.data)
+      
+      // Update Terminal Logs
       setLogs(prev => [...prev, data])
+
+      // 🚀 Map backend agent names to the Pipeline UI
+      const agentMapping: Record<string, string> = {
+        "PlannerAgent": "Planner",
+        "SchedulerAgent": "Scheduler",
+        "Orchestrator": "Human_review", // We assume orchestrator manages the interrupt
+        "MarketingAgent": "Execution_phase",
+        "BudgetAgent": "Execution_phase",
+        "EmailAgent": "Execution_phase",
+        "VolunteerAgent": "Execution_phase",
+      }
+
+      const mappedNodeName = agentMapping[data.agent] || data.agent;
+
+      // Automatically cascade completed statuses down the pipeline
+      if (mappedNodeName === "Planner") {
+        setNodeStatuses(prev => ({ ...prev, Planner: "running" }));
+      } else if (mappedNodeName === "Scheduler") {
+        setNodeStatuses(prev => ({ ...prev, Planner: "completed", Scheduler: "running" }));
+      } else if (data.message && data.message.includes("Awaiting Human")) {
+         setNodeStatuses(prev => ({ ...prev, Scheduler: "completed", Human_review: "running" }));
+      } else if (mappedNodeName === "Execution_phase") {
+         setNodeStatuses(prev => ({ ...prev, Human_review: "completed", Execution_phase: "running" }));
+      }
+
+      // Update the sub-text under the running card
+      if (mappedNodeName) {
+        setActiveLogs(prev => ({ ...prev, [mappedNodeName]: data.action || data.message || "Working..." }));
+      }
     }
 
     // 3. Fetch the payload the user typed in the form
@@ -60,23 +96,22 @@ export default function AgentsPage() {
 
   const startSwarm = async (payload: any) => {
     setStatus("PLANNING")
+    setNodeStatuses({ Planner: "running", Scheduler: "waiting", Human_review: "waiting", Execution_phase: "waiting" })
     try {
       const result = await createEvent(payload)
 
-      setActiveThread(result.thread_id) // Save the dynamic thread ID
+      setActiveThread(result.thread_id) 
       setSchedule(result.schedule)
-
-      // 🚀 Load the schedule into the editable text area
       setScheduleStr(JSON.stringify(result.schedule, null, 2))
       if (result.stability_score) setScore(result.stability_score)
 
       if (result.requires_approval) {
         setStatus("AWAITING_APPROVAL")
+        setNodeStatuses(prev => ({ ...prev, Scheduler: "completed", Human_review: "running" }))
       } else {
         setStatus("COMPLETED")
       }
 
-      // Refresh sidebar
       fetchHistory().then(res => setHistoryThreads(res?.threads || []))
     } catch (e) {
       console.error(e)
@@ -84,7 +119,6 @@ export default function AgentsPage() {
     }
   }
 
-  // 🚀 NEW: Load Full State when clicking a past thread in the sidebar
   const loadPastThread = async (threadId: string) => {
     setActiveThread(threadId)
     setLogs([{ agent: "System", action: `Loaded SQLite memory for ${threadId}...`, status: "success" }])
@@ -93,9 +127,16 @@ export default function AgentsPage() {
       const data = await fetchThreadState(threadId)
       setSchedule(data.schedule)
       setScheduleStr(JSON.stringify(data.schedule, null, 2))
-      setMarketing(data.marketing)
+      
+      // Handle the complex data structure returned by the new Map-Reduce graph
+      if (data.marketing_copy) {
+        setMarketing(Array.isArray(data.marketing_copy) ? data.marketing_copy.map((m: any) => `[${m.platform || m.domain}]\n${m.copy || m.output}`).join("\n\n") : data.marketing_copy)
+      }
       setEmailLogs(data.email_logs || [])
-      setStatus(data.status)
+      setStatus(data.status || "COMPLETED")
+      
+      // Auto-complete the UI Tracker for loaded threads
+      setNodeStatuses({ Planner: "completed", Scheduler: "completed", Human_review: "completed", Execution_phase: "completed" })
     } catch (e) {
       console.error("Failed to load thread", e)
     }
@@ -103,24 +144,25 @@ export default function AgentsPage() {
 
   const handleApprove = async () => {
     setStatus("EXECUTING")
+    setNodeStatuses(prev => ({ ...prev, Human_review: "completed", Execution_phase: "running" }))
     try {
-      // 🚀 Parse the user-edited string from the textarea back into JSON
       const editedScheduleJson = JSON.parse(scheduleStr)
-
-      // Pass the edited plan back to the backend
       const result = await approvePlan({ ...eventData, edited_plan: editedScheduleJson })
-      setMarketing(result.marketing)
-      setEmailLogs(result.email_outreach_logs || [])
+      
+      // Handle the new Map-Reduce return structure
+      if (result.marketing) {
+         setMarketing(Array.isArray(result.marketing) ? result.marketing.map((m: any) => `[${m.task}]\n${m.output}`).join("\n\n") : result.marketing);
+      }
+      setEmailLogs(result.email_outreach_logs || result.emails || [])
       setStatus("COMPLETED")
+      setNodeStatuses(prev => ({ ...prev, Execution_phase: "completed" }))
 
-      // 🧠 SAVE TO DASHBOARD LOCAL STORAGE
       const finalManifest = {
         event_name: eventData.name,
-        schedule: editedScheduleJson, // Save the human-edited version
+        schedule: editedScheduleJson, 
         marketing: result.marketing,
-        email_outreach_logs: result.email_outreach_logs,
-        stability_score: score || 95.2,
-        agent_outputs: result.agent_outputs || {}
+        email_outreach_logs: result.email_outreach_logs || result.emails,
+        agent_outputs: result.agent_outputs || result.operations || {}
       }
       localStorage.setItem("swarmResult", JSON.stringify(finalManifest))
 
@@ -151,7 +193,6 @@ export default function AgentsPage() {
       }
       setStatus("COMPLETED")
 
-      // Update local storage
       const existingDataStr = localStorage.getItem("swarmResult")
       let manifest = existingDataStr ? JSON.parse(existingDataStr) : {}
       manifest.schedule = result.new_schedule
@@ -165,23 +206,24 @@ export default function AgentsPage() {
     }
   }
 
-  // 🚀 NEW: TIME TRAVEL CHAT HANDLER
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!chatInput || !activeThread) return;
 
     setStatus("PLANNING")
-    setChatInput("") // clear box
+    setNodeStatuses({ Planner: "running", Scheduler: "waiting", Human_review: "waiting", Execution_phase: "waiting" })
+    const input = chatInput;
+    setChatInput("")
 
     try {
-      // Fork the state and rewind time in LangGraph!
-      const result = await forkEvent({ thread_id: activeThread, new_prompt: chatInput })
+      const result = await forkEvent({ thread_id: activeThread, new_prompt: input })
 
       setSchedule(result.schedule)
       setScheduleStr(JSON.stringify(result.schedule, null, 2))
       if (result.stability_score) setScore(result.stability_score)
 
-      setStatus("AWAITING_APPROVAL") // Wait for user to approve the newly generated plan
+      setStatus("AWAITING_APPROVAL") 
+      setNodeStatuses(prev => ({ ...prev, Planner: "completed", Scheduler: "completed", Human_review: "running" }))
     } catch (e) {
       console.error(e)
     }
@@ -190,7 +232,7 @@ export default function AgentsPage() {
   return (
     <div className="h-screen flex bg-[#1e1e1e] text-vscode-text font-mono overflow-hidden relative">
 
-      {/* 🚀 LEFT SIDEBAR: ChatGPT Style History */}
+      {/* LEFT SIDEBAR: History */}
       <div className="w-64 border-r border-vscode-border bg-[#181818] flex flex-col z-20">
         <div className="p-4 border-b border-vscode-border">
           <button onClick={() => { localStorage.removeItem("eventPayload"); router.push('/') }} className="w-full flex items-center gap-2 bg-vscode-blue/10 text-vscode-blue border border-vscode-blue/30 px-4 py-2 rounded text-xs hover:bg-vscode-blue hover:text-white transition-all">
@@ -215,8 +257,8 @@ export default function AgentsPage() {
       </div>
 
       {/* RIGHT PANEL: Main Content */}
-      <div className="flex-1 flex flex-col relative p-4">
-        <div className="scanline"></div>
+      <div className="flex-1 flex flex-col relative p-4 overflow-y-auto">
+        <div className="scanline pointer-events-none absolute inset-0 z-50 opacity-10"></div>
 
         {/* HEADER */}
         <div className="flex justify-between items-center border-b border-vscode-border pb-4 mb-4 z-10">
@@ -230,7 +272,6 @@ export default function AgentsPage() {
             </span>
           </div>
 
-          {/* HUMAN IN THE LOOP CONTROLS */}
           <div className="flex gap-4">
             {status === "AWAITING_APPROVAL" && (
               <button onClick={handleApprove} className="flex items-center gap-2 bg-vscode-green/20 text-vscode-green border border-vscode-green px-4 py-2 rounded text-xs hover:bg-vscode-green hover:text-black transition-all shadow-[0_0_15px_rgba(78,201,176,0.3)]">
@@ -257,11 +298,16 @@ export default function AgentsPage() {
           </div>
         </div>
 
+        {/* 🚀 INJECTED PIPELINE TRACKER */}
+        <div className="z-10 mb-4">
+           <PipelineTracker nodeStatuses={nodeStatuses} activeLogs={activeLogs} />
+        </div>
+
         {/* MAIN DASHBOARD GRID */}
-        <div className="flex-1 grid grid-cols-12 gap-4 overflow-hidden z-10 mb-4">
+        <div className="grid grid-cols-12 gap-4 z-10 mb-4 flex-shrink-0">
 
           {/* LEFT PANEL: Live Agent Terminal */}
-          <div className="col-span-4 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-xl overflow-hidden">
+          <div className="col-span-4 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-xl overflow-hidden h-[600px]">
             <div className="bg-[#1e1e1e] border-b border-vscode-border p-2 text-xs flex gap-2">
               <span className="text-vscode-blue">Terminal</span>
               <span className="text-gray-500">VectorDB Logs</span>
@@ -270,10 +316,10 @@ export default function AgentsPage() {
           </div>
 
           {/* RIGHT PANEL: Outputs */}
-          <div className="col-span-8 grid grid-rows-2 gap-4 overflow-hidden">
+          <div className="col-span-8 flex flex-col gap-4">
 
-            {/* 🚀 EDITABLE SCHEDULE PANEL */}
-            <div className="border border-vscode-border bg-[#252526] rounded overflow-hidden flex flex-col shadow-xl">
+            {/* EDITABLE SCHEDULE PANEL */}
+            <div className="border border-vscode-border bg-[#252526] rounded overflow-hidden flex flex-col shadow-xl h-64">
               <div className="bg-[#1e1e1e] border-b border-vscode-border p-2 text-xs flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <Calendar size={14} className="text-vscode-yellow" /> <span>schedule.json</span>
@@ -287,28 +333,18 @@ export default function AgentsPage() {
                 disabled={status !== "AWAITING_APPROVAL"}
                 className="flex-1 p-4 bg-[#1e1e1e] text-vscode-orange text-xs font-mono outline-none resize-none disabled:opacity-70"
                 placeholder="Awaiting Swarm..."
+                spellCheck={false}
               />
             </div>
 
             {/* BOTTOM RIGHT: Marketing & Emails (Split) */}
-            <div className="grid grid-cols-2 gap-4 overflow-hidden">
+            <div className="grid grid-cols-2 gap-4 flex-1 min-h-[320px]">
               <div className="border border-vscode-border bg-[#252526] rounded overflow-hidden flex flex-col shadow-xl">
                 <div className="bg-[#1e1e1e] border-b border-vscode-border p-2 text-xs flex items-center gap-2">
                   <Share2 size={14} className="text-vscode-purple" /> <span>marketing_assets.md</span>
                 </div>
                 <div className="p-4 overflow-y-auto text-xs text-vscode-text whitespace-pre-wrap">
-                  {marketing ? marketing : <span className="text-gray-500 italic">Awaiting Human Approval to generate copy...</span>}
-                </div>
-              </div>
-
-              {/* 🚀 NEW: MONTE CARLO VISUALIZATION PANEL */}
-              <div className="border border-vscode-border bg-[#252526] rounded overflow-hidden flex flex-col shadow-xl h-64 mt-4">
-                <div className="bg-[#1e1e1e] border-b border-vscode-border p-2 text-xs flex items-center gap-2">
-                  <Play size={14} className="text-vscode-blue" /> <span>physics_engine.viz</span>
-                </div>
-                <div className="flex-1">
-                  {/* Pass your simulation data here. For the hackathon demo, you can even mock this array if the real data is too complex to route! */}
-                  <MonteCarloChart metrics={simMetrics} />
+                  {marketing ? marketing : <span className="text-gray-500 italic">Awaiting Human Approval to execute Map-Reduce Swarm...</span>}
                 </div>
               </div>
 
@@ -320,13 +356,13 @@ export default function AgentsPage() {
                   {Array.isArray(emailLogs) && emailLogs.length > 0 ? (
                     emailLogs.map((log, i) => (
                       <div key={i} className="mb-2 border-b border-vscode-border pb-2">
-                        <span className="text-vscode-blue">[{log.status || 'SENT'}]</span> To: <span className="text-vscode-orange">{log.email}</span>
+                        <span className="text-vscode-blue">[{log.status || 'DRAFTED'}]</span> To: <span className="text-vscode-orange">{log.email || log.recipient || "All Participants"}</span>
                         <br />
-                        <span className="text-gray-400">"{log.preview || log.subject}"</span>
+                        <span className="text-gray-400 font-mono">"{log.preview || log.body || log.subject || "View details..."}"</span>
                       </div>
                     ))
                   ) : (
-                    <span className="text-gray-500 italic">No emails dispatched yet.</span>
+                    <span className="text-gray-500 italic">No emails drafted yet.</span>
                   )}
                 </div>
               </div>
@@ -335,14 +371,14 @@ export default function AgentsPage() {
           </div>
         </div>
 
-        {/* 🚀 BOTTOM CHAT INPUT (Time Machine Controls) */}
-        <div className="border border-vscode-border bg-[#181818] rounded-lg z-10 shadow-xl">
+        {/* BOTTOM CHAT INPUT (Time Machine Controls) */}
+        <div className="border border-vscode-border bg-[#181818] rounded-lg z-10 shadow-xl mt-auto">
           <form onSubmit={handleChatSubmit} className="flex items-center gap-4 bg-[#252526] rounded-lg p-2 focus-within:border-vscode-blue transition-colors">
             <input
               type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              placeholder="e.g. 'Rewind and change the budget to $20k' or 'Add a 30 min coffee break...'"
+              placeholder="e.g. 'Rewind and change the budget to $20k' or 'Push the keynote back 2 hours...'"
               className="flex-1 bg-transparent border-none outline-none text-vscode-text text-sm px-2"
             />
             <button type="submit" disabled={status === "PLANNING"} className="bg-vscode-blue/20 text-vscode-blue p-2 rounded hover:bg-vscode-blue hover:text-white transition-all disabled:opacity-50">

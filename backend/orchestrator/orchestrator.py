@@ -2,393 +2,273 @@ import asyncio
 import uuid
 import sqlite3
 import os
+import json
+import re
+
 from agents.planner_agent import PlannerAgent
 from agents.scheduler_agent import SchedulerAgent
 from agents.marketing_agent import MarketingAgent
-from agents.critic_agent import CriticAgent
-from agents.crisis_agent import CrisisAgent
+from agents.updater_agent import UpdaterAgent
 from agents.email_agent import EmailAgent
-from world_model.event_world_model import WorldModelAgent
-from learning.policy_memory import RLPolicyMemory
-from orchestrator.workflow_graph import build_graph
-from memory.vector_store import search_memory, store_memory
-
-# 🧠 DEEPMIND IMPORTS (Planning & Simulation)
-from planning.monte_carlo_planner import MonteCarloPlanner
-from planning.strategy_generator import StrategyGenerator
-
-# 🌟 NEW MODULAR AGENT IMPORTS
 from agents.budget_agent import BudgetAgent
 from agents.volunteer_agent import VolunteerAgent
 from agents.sponsor_agent import SponsorAgent
-from ml_models.attendance_predictor import AttendancePredictor
+from orchestrator.workflow_graph import build_graph, Context
+
+from langchain_openai import ChatOpenAI
+from config import OLLAMA_BASE_URL, OPENAI_API_KEY, CLOUD_MODEL
+from langgraph.types import Command # 🚀 Required to resume from interrupts
 
 class EventOrchestrator:
     def __init__(self):
-        # 1. Initialize Core Agents
+        # 1. Initialize Clean Agents (Removed Physics/Crisis Agents entirely)
         self.planner = PlannerAgent()
         self.scheduler = SchedulerAgent()
         self.marketing = MarketingAgent()
         self.email = EmailAgent()
-        self.world_model = WorldModelAgent()
-        self.critic = CriticAgent()
-        self.crisis = CrisisAgent()
-        
-        # 2. Initialize Advanced/Optional Agents & ML Models
         self.budget = BudgetAgent()
         self.volunteer = VolunteerAgent()
         self.sponsor = SponsorAgent()
-        self.attendance_ml = AttendancePredictor()
+        self.updater_agent = UpdaterAgent()
         
-        self.mcts = MonteCarloPlanner(self.world_model)
-        self.strategy_gen = StrategyGenerator()
-        
-        # 3. Pass ALL agents into the dynamic autonomous graph
         self.graph = build_graph(
-            self.planner,
-            self.critic,
-            self.scheduler,
-            self.marketing,
-            self.email, 
-            self.world_model,
-            self.budget,
-            self.volunteer,
-            self.attendance_ml,
-            self.sponsor
+            self.planner, self.scheduler, self.marketing,
+            self.email, self.budget, self.volunteer, self.sponsor, self.updater_agent
         )
+        
+        self.user_context = Context(user_id="user_anmol") 
+        self.llm = ChatOpenAI(model=CLOUD_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0)
 
     def get_thread_history(self):
-        """Scans the SQLite database to find all historical chat/event threads."""
         db_path = os.path.join(os.getcwd(), "memory", "swarm_threads.sqlite")
-        if not os.path.exists(db_path): 
-            return []
-            
+        if not os.path.exists(db_path): return []
         try:
             with sqlite3.connect(db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT DISTINCT thread_id FROM checkpoints")
                 rows = cursor.fetchall()
-                # Return the list of unique thread IDs
                 return [row[0] for row in rows]
         except Exception as e:
             print(f"DB Read Error: {e}")
             return []
 
     async def plan_event(self, event_data, streamer, thread_id=None):
-        await streamer.broadcast("Orchestrator", "Initializing Swarm Sequence...", "thinking")
-
-        if not thread_id:
-            thread_id = f"evt_{str(uuid.uuid4())[:8]}"
+        await streamer.broadcast("Orchestrator", "Initializing Fast Zero-Shot Swarm Sequence...", "thinking")
+        if not thread_id: thread_id = f"evt_{str(uuid.uuid4())[:8]}"
         
-        # Thread ID tells LangGraph exactly where to store this event's memory
         self.thread_config = {"configurable": {"thread_id": thread_id}}
-        
         initial_state = {
-            "event_data": event_data,
-            "iterations": 0,
-            "candidates": [],
-            "plan": {},
-            "score": 0,
-            "requires_approval": False,
-            "agent_outputs": {}
+            "event_data": event_data, "plan": {}, "schedule": [],
+            "agent_outputs": {}, "audit_log": [], "completed_work": []
         }
         
-        await streamer.broadcast("SwarmNetwork", "Executing adaptive reasoning graph...", "simulating")
+        # Runs until it hits the interrupt() inside the human_review node
+        async for chunk in self.graph.astream(initial_state, config=self.thread_config, stream_mode="updates", version="v2", context=self.user_context):
+            if chunk["type"] == "updates":
+                for node_name, state_update in chunk["data"].items():
+                    await streamer.broadcast(node_name.capitalize(), "Autonomously generating plan...", "simulating")
         
-        # Run graph until it hits the interrupt_before=["supervisor"] breakpoint
-        final_state = await self.graph.ainvoke(initial_state, config=self.thread_config)
+        final_state = self.graph.get_state(self.thread_config)
         
-        await streamer.broadcast("Orchestrator", "Schedule Drafted. Pausing Swarm for Human Approval.", "warning")
-        
-        # FIX: final_state is a dict, so we use .get() directly on it!
         return {
             "thread_id": thread_id,
             "workflow_executed": True,
-            "selected_plan": final_state.get("plan"),
-            "schedule": final_state.get("schedule"),
-            "requires_approval": final_state.get("requires_approval"),
-            "stability_score": final_state.get("score")
+            "selected_plan": final_state.values.get("plan"),
+            "schedule": final_state.values.get("schedule")
         }
-    
-    async def fork_and_update(self, thread_id, new_prompt, streamer):
-        """Rewinds time, injects a new user prompt, and forces the Swarm to replan."""
-        self.thread_config = {"configurable": {"thread_id": thread_id}}
-        await streamer.broadcast("Orchestrator", f"TIME TRAVEL INITIATED: Rewinding state for {thread_id}...", "warning")
-        
-        # 1. Fetch the frozen state from the SQLite hard drive
-        current_state = self.graph.get_state(self.thread_config)
-        event_data = current_state.values.get("event_data", {})
-        
-        # 2. Inject the user's new prompt/constraint into the event memory
-        # FIX 3: Route to 'user_constraints' instead of 'marketing_prompt'
-        event_data["user_constraints"] = event_data.get("user_constraints", "") + f" \nNEW ORGANIZER CONSTRAINT: {new_prompt}"
-        
-        # 3. STATE SPOOFING: We update the state *acting as the Critic Node*. 
-        # FIX 4: Explicitly wipe the old plan and schedule to prevent UI crashes/blanking
-        self.graph.update_state(
-            self.thread_config,
-            {
-                "event_data": event_data, 
-                "score": 0, 
-                "iterations": 0,
-                "plan": {},         # <--- WIPES OLD DATA
-                "schedule": []      # <--- WIPES OLD DATA
-            },
-            as_node="critic"
-        )
-        
-        await streamer.broadcast("CriticAgent", f"Applying new constraint: '{new_prompt}'. Routing back to Planner.", "simulating")
-        
-        # 4. Resume execution from the newly forked past
-        async for event in self.graph.astream(None, config=self.thread_config):
-            for node_name, state_update in event.items():
-                await streamer.broadcast(node_name.capitalize(), "Autonomously replanning...", "simulating")
-                
-        final_state = self.graph.get_state(self.thread_config)
-        return {
-            "status": "forked_and_replanned",
-            "schedule": final_state.values.get("schedule", []),
-            "requires_approval": True,
-            "stability_score": final_state.values.get("score", 0)
-        }   
 
     async def approve_plan(self, event_data, streamer):
-        await streamer.broadcast("Orchestrator", "Human intervention received. Processing...", "success")
+        """Passes 'approve' to the paused interrupt(), launching the universal parallel workers."""
+        await streamer.broadcast("Orchestrator", "Plan approved. Engaging Universal Orchestrator-Worker Subgraph...", "simulating")
         
-        # 1. TIME TRAVEL / STATE FORCING (If the human edited the plan)
-        edited_plan = event_data.get("edited_plan")
-        if edited_plan:
-            await streamer.broadcast("Orchestrator", "Human edit detected. Routing back to Simulation Engine...", "warning")
-            self.graph.update_state(self.thread_config, {"plan": edited_plan}, as_node="planner")
-            
-            async for event in self.graph.astream(None, config=self.thread_config):
-                for node_name, state_update in event.items():
-                    await streamer.broadcast(node_name.capitalize(), f"Simulating human-edited plan physics...", "simulating")
-            
-            new_state = self.graph.get_state(self.thread_config)
-            return {
-                "status": "re_evaluated",
-                "message": "Human plan was simulated and critiqued. Please review the new stability score.",
-                "plan": new_state.values.get("plan"),
-                "simulation_metrics": new_state.values.get("simulation_metrics"),
-                "score": new_state.values.get("score")
-            }
+        # 🚀 Resume the interrupted graph with the explicit "approve" command!
+        async for chunk in self.graph.astream(Command(resume="approve"), config=self.thread_config, stream_mode="updates", version="v2", context=self.user_context):
+            if chunk["type"] == "updates":
+                for node_name, state_update in chunk["data"].items():
+                    await streamer.broadcast(node_name.capitalize(), "Autonomously executing parallel task...", "simulating")
 
-        await streamer.broadcast("Orchestrator", "Plan approved. Engaging Autonomous Execution Network...", "simulating")
-        
-        # --- NEW: DYNAMIC AGENT INJECTION ---
-        new_agents_requested = event_data.get("add_agents", []) 
-        if new_agents_requested:
-            # Add this to the event_data state so the Supervisor sees it when it wakes up
-            event_data["requested_agents"] = new_agents_requested
-            self.graph.update_state(self.thread_config, {"event_data": event_data})
-            await streamer.broadcast("Orchestrator", f"Organizer requested dynamic injection of: {new_agents_requested}.", "warning")
-
-        # 2. TRUE PARALLEL ASYNC EXECUTION (Hybrid Swarm Speedup)
-        # We bypass the sequential LangGraph router here and fire all local agents simultaneously
-        await streamer.broadcast("SupervisorAgent", "Dynamically firing local GPU agents in parallel...", "thinking")
-        
-        # Fetch current state
-        current_state = self.graph.get_state(self.thread_config).values
-        evt_data = current_state.get("event_data", event_data)
-        final_schedule = current_state.get("schedule", [])
-        evt_data["schedule"] = final_schedule # Marketing needs this injected
-        
-        # Broadcast active execution UI
-        for agent_node in ["marketing", "budget", "volunteer", "sponsor", "email", "attendance_ml"]:
-            await streamer.broadcast(agent_node.capitalize(), "Autonomously executing task in parallel...", "simulating")
-
-        # Fire all local GPU tasks at the exact same time
-        marketing_task = self.marketing.generate_campaign(evt_data)
-        budget_task = self.budget.calculate(evt_data)
-        volunteer_task = self.volunteer.assign_shifts(evt_data, final_schedule)
-        sponsor_task = self.sponsor.draft_sponsorships(evt_data)
-        
-        # Gather async results simultaneously
-        marketing_assets, budget_res, volunteer_res, sponsor_res = await asyncio.gather(
-            marketing_task, budget_task, volunteer_task, sponsor_task
-        )
-        
-        # Run synchronous models (Email & ML predictors)
-        email_logs = self.email.send_invites(evt_data.get("csv_content", ""), "Your optimal schedule is locked!")
-        attendance_forecast = self.attendance_ml.predict_attendance(evt_data.get("expected_crowd", 500))
-        
-        agent_outputs = {
-            "budget": budget_res,
-            "volunteer": volunteer_res,
-            "sponsor": sponsor_res,
-            "attendance_forecast": attendance_forecast
-        }
-        
-        # Save final execution state back to graph memory
-        self.graph.update_state(self.thread_config, {
-            "marketing_copy": marketing_assets,
-            "email_logs": email_logs,
-            "agent_outputs": agent_outputs
-        })
-        
-        # 3. SELF-IMPROVEMENT LOOP
-        event_name = event_data.get("name", "Unknown Event")
-        crowd = event_data.get("expected_crowd", "Unknown")
-        memory_string = f"SUCCESSFUL EVENT '{event_name}' ({crowd} attendees). Schedule used: {final_schedule}. Marketing used: {marketing_assets}"
-        store_memory(memory_string)
-        
-        await streamer.broadcast("RLPolicyMemory", "Experience stored. Self-improvement weights updated.", "success")
+        final_state = self.graph.get_state(self.thread_config)
         await streamer.broadcast("Orchestrator", "All operational phases autonomously completed.", "idle")
+        
+        agent_outputs = final_state.values.get("agent_outputs", {})
         
         return {
             "status": "approved_and_completed",
-            "marketing": marketing_assets,
-            "schedule": final_schedule,
-            "email_outreach_logs": email_logs,
-            "agent_outputs": agent_outputs
+            "marketing": agent_outputs.get("marketing", []),
+            "email_outreach_logs": agent_outputs.get("emails", []),
+            "operations": agent_outputs.get("operations", [])
+        }
+
+    async def fork_and_update(self, thread_id, new_prompt, streamer):
+        """Passes the user's feedback text to the paused interrupt() to trigger a replan."""
+        self.thread_config = {"configurable": {"thread_id": thread_id}}
+        await streamer.broadcast("Orchestrator", f"Sending constraints to Planner for {thread_id}...", "warning")
+        
+        # 🚀 Resume the interrupted graph with the user's feedback text!
+        # The human_review node will catch this text, append it to constraints, and route to planner.
+        async for chunk in self.graph.astream(Command(resume=new_prompt), config=self.thread_config, stream_mode="updates", version="v2", context=self.user_context):
+            if chunk["type"] == "updates":
+                for node_name, state_update in chunk["data"].items():
+                    await streamer.broadcast(node_name.capitalize(), "Applying feedback & replanning...", "simulating")
+                    
+        final_state = self.graph.get_state(self.thread_config)
+        return {
+            "status": "forked_and_replanned",
+            "schedule": final_state.values.get("schedule", [])
+        }   
+
+    async def route_user_intent(self, thread_id, user_prompt, streamer):
+        """
+        🚀 THE BRAIN: Categorizes the prompt and directs it to the correct surgical action.
+        """
+        await streamer.broadcast("Orchestrator", "Analyzing command intent...", "thinking")
+        
+        routing_prompt = f"""
+        Analyze this event management request: "{user_prompt}"
+        Categorize it into exactly one of these:
+        1. SEND_ACTION: User wants to physically send/dispatch emails or post content that was already drafted.
+        2. MICRO_EDIT: User wants to change times, postpone, delay, or fix small text details without changing the event structure.
+        3. CANCELLATION: User wants to cancel the event entirely.
+        4. FULL_REPLAN: User wants to change the theme, add new sessions, or fundamentally alter the event flow.
+
+        Return ONLY the category name.
+        """
+        
+        response = await self.llm.ainvoke(routing_prompt)
+        intent = response.content.strip().upper()
+
+        if "SEND_ACTION" in intent:
+            return await self.dispatch_outputs(thread_id, streamer)
+        elif "MICRO_EDIT" in intent:
+            return await self.conversational_micro_edit(thread_id, user_prompt, streamer)
+        elif "CANCELLATION" in intent:
+            return await self.handle_cancellation(thread_id, streamer)
+        else:
+            # Default to the LangGraph "fork_and_update" for major changes
+            return await self.fork_and_update(thread_id, user_prompt, streamer)
+
+    async def dispatch_outputs(self, thread_id, streamer):
+        """Action: Marks drafted emails as 'SENT' without touching the graph logic."""
+        self.thread_config = {"configurable": {"thread_id": thread_id}}
+        await streamer.broadcast("EmailAgent", "Connecting to SMTP... Dispatching drafted notices.", "simulating")
+        
+        state = self.graph.get_state(self.thread_config)
+        agent_outputs = state.values.get("agent_outputs", {})
+        emails = agent_outputs.get("emails", [])
+        
+        # Update status to SENT
+        for email in emails:
+            email["status"] = "SENT"
+            
+        # Update the state directly (Durable Execution)
+        self.graph.update_state(self.thread_config, {"agent_outputs": agent_outputs})
+        await streamer.broadcast("Orchestrator", "Emails dispatched successfully.", "success")
+        
+        return {"status": "dispatched", "email_logs": emails}
+
+    async def handle_cancellation(self, thread_id, streamer):
+        """Action: Wipes schedule and triggers the execution phase to draft cancellation copy."""
+        self.thread_config = {"configurable": {"thread_id": thread_id}}
+        await streamer.broadcast("Orchestrator", "Initiating Cancellation Protocol...", "warning")
+        
+        # Update schedule to a 'Cancelled' state
+        cancelled_schedule = [{"time": "N/A", "session": "EVENT CANCELLED"}]
+        self.graph.update_state(self.thread_config, {"schedule": cancelled_schedule})
+        
+        # We resume and tell the graph to run the parallel execution nodes (marketing/email) 
+        # so they generate "We are sorry, the event is cancelled" text.
+        return await self.approve_plan(None, streamer)
+
+    
+    
+    async def conversational_micro_edit(self, thread_id, user_prompt, streamer):
+        """Fast JSON-manipulation for delays without a full replan."""
+        self.thread_config = {"configurable": {"thread_id": thread_id}}
+        await streamer.broadcast("Orchestrator", f"Processing targeted schedule adjustment...", "thinking")
+        
+        current_state = self.graph.get_state(self.thread_config)
+        current_schedule = current_state.values.get("schedule", [])
+        
+        if not current_schedule: return {"error": "No schedule exists yet to edit."}
+
+        llm = ChatOpenAI(model=CLOUD_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0)
+        
+        editor_prompt = f"""
+        You are a precise JSON text editor.
+        CURRENT SCHEDULE JSON: {json.dumps(current_schedule)}
+        USER REQUEST: "{user_prompt}"
+        INSTRUCTIONS: Apply the user's requested time/day shifts to the schedule. DO NOT change session names.
+        Respond ONLY with the updated raw JSON array.
+        """
+        
+        await streamer.broadcast("Copilot", "Calculating new timeline physics...", "simulating")
+        response = await llm.ainvoke(editor_prompt)
+        
+        match = re.search(r'\[.*\]', response.content, re.DOTALL)
+        if not match: return {"error": "Failed to parse AI schedule adjustment."}
+            
+        new_schedule = json.loads(match.group(0))
+        
+        # Directly update the state with the shifted schedule.
+        # Since we are paused at 'human_review', the user will see the updated times on their screen!
+        self.graph.update_state(self.thread_config, {"schedule": new_schedule})
+        
+        await streamer.broadcast("Orchestrator", "Schedule shifted. Click 'Approve' to lock it in.", "success")
+        
+        return {
+            "status": "micro_edit_completed_awaiting_approval",
+            "schedule": new_schedule
         }
 
     async def manual_override(self, override_data, streamer):
-        """Allows the user to forcefully edit the locked schedule or inject a custom crisis."""
+        """Allows direct JSON edits from the UI table."""
         action_type = override_data.get("override_type") 
-        
         if action_type == "edit_schedule":
-            await streamer.broadcast("Orchestrator", "Manual schedule override initiated by Organizer.", "error")
+            await streamer.broadcast("Orchestrator", "Manual schedule override initiated.", "warning")
             new_schedule = override_data.get("new_schedule", [])
             
-            # Wake up the EmailAgent to blast the manual update
-            await streamer.broadcast("EmailAgent", "Notifying participants of manual schedule change...", "thinking")
-            logs = self.email.send_invites(
-                csv_content=override_data.get("csv_content", ""), 
-                base_draft="URGENT: The event schedule has been manually updated by the organizer. Please check the live dashboard for the new timings."
-            )
+            # Update the state. User can then hit "Approve" (via approve_plan endpoint) to proceed
+            self.graph.update_state(self.thread_config, {"schedule": new_schedule})
+            await streamer.broadcast("Orchestrator", "Schedule updated in memory. Awaiting approval.", "success")
             
-            await streamer.broadcast("Orchestrator", "Manual override complete. Participants notified.", "success")
-            return {"status": "Schedule manually updated", "new_schedule": new_schedule, "emails_sent": len(logs)}
-            
-        elif action_type == "custom_crisis":
-            # Route custom user text directly into our Monte Carlo crisis engine
-            crisis_desc = override_data.get("description", "A custom emergency has occurred.")
-            await streamer.broadcast("Orchestrator", f"CUSTOM CRISIS INJECTED: {crisis_desc}", "error")
-            
-            # We reuse our existing robust handle_crisis pipeline
-            return await self.handle_crisis(override_data, streamer, "manual_trigger")
-            
+            return {"status": "Schedule manually updated.", "new_schedule": new_schedule}
         return {"error": "Unknown override type."}
     
     async def resume_event(self, streamer):
-        """Pulls the exact state from SQLite and resumes execution after a server crash."""
-        await streamer.broadcast("Orchestrator", "CRASH RECOVERY INITIATED: Loading SQLite Checkpoint...", "warning")
-        
-        # We target the exact same thread we used before
+        await streamer.broadcast("Orchestrator", "CRASH RECOVERY INITIATED...", "warning")
         self.thread_config = {"configurable": {"thread_id": "event_thread_1"}}
         
-        # 1. Inspect the saved state before we start
         saved_state = self.graph.get_state(self.thread_config)
-        next_agent = saved_state.next # LangGraph tells us exactly who is next in line!
-        
+        next_agent = saved_state.next 
         if not next_agent:
-            await streamer.broadcast("Orchestrator", "Thread is already fully completed. Nothing to resume.", "idle")
+            await streamer.broadcast("Orchestrator", "Thread already completed.", "idle")
             return {"status": "completed"}
 
-        await streamer.broadcast("Orchestrator", f"Found saved state! Resuming execution at: {next_agent[0].capitalize()}", "success")
+        await streamer.broadcast("Orchestrator", f"Resuming execution at: {next_agent[0].capitalize()}", "success")
         
-        # 2. Pass 'None' to instantly resume the graph from the exact point of failure
-        async for event in self.graph.astream(None, config=self.thread_config):
-            for node_name, state_update in event.items():
-                if node_name == "supervisor":
-                    await streamer.broadcast("SupervisorAgent", "Dynamically firing local GPU agents in parallel...", "thinking")
-                else:
+        async for chunk in self.graph.astream(None, config=self.thread_config, stream_mode="updates", version="v2", context=self.user_context):
+            if chunk["type"] == "updates":
+                for node_name, state_update in chunk["data"].items():
                     await streamer.broadcast(node_name.capitalize(), "Autonomously executing task...", "simulating")
 
-        # 3. Fetch the recovered final results
         final_state = self.graph.get_state(self.thread_config)
         agent_outputs = final_state.values.get("agent_outputs", {})
-        
-        await streamer.broadcast("Orchestrator", "Recovery successful. All operations completed.", "idle")
-        
         return {
-            "status": "recovered_and_completed",
+            "status": "recovered",
             "schedule": final_state.values.get("schedule", []),
-            "marketing": final_state.values.get("marketing_copy", ""),
-            "agent_outputs": agent_outputs
+            "marketing": agent_outputs.get("marketing", []),
+            "operations": agent_outputs.get("operations", [])
         }
-    
-    
-
-    async def handle_crisis(self, crisis_data, streamer, crisis_event):
-        crisis_desc = crisis_data.get('description', 'Unknown anomaly detected.')
-        event_name = crisis_data.get("event_name", "the current event") 
-        crowd_size = crisis_data.get("expected_crowd", 500)
-        
-        await streamer.broadcast("Orchestrator", f"CRISIS DETECTED: {crisis_desc}", "error")
-        
-        # 1. VECTOR DB SEARCH
-        await streamer.broadcast("WorldModelAgent", "Querying VectorDB for historical crisis data...", "simulating")
-        search_query = f"Crisis: {crisis_desc} during event: {event_name}"
-        past_crises = search_memory(search_query)
-        
-        # 2. STRATEGY GENERATION (AI dynamically invents options)
-        await streamer.broadcast("StrategyGenerator", "Inventing context-aware mitigation strategies...", "thinking")
-        possible_actions = await self.strategy_gen.generate(crisis_desc, crowd_size)
-        
-        # 3. MONTE CARLO TREE SEARCH (Simulating the AI's ideas)
-        await streamer.broadcast("MonteCarloPlanner", f"Running 100x physics simulations on proposed strategies...", "simulating")
-        base_state = {"delay": 0, "crowd_size": crowd_size}
-        
-        # MCTS finds which of the LLM's ideas was mathematically the safest
-        best_math_action = self.mcts.plan(possible_actions, simulations=100)
-        best_action_name = best_math_action.get("name", "Dynamic Reschedule")
-        
-        await streamer.broadcast("MonteCarloPlanner", f"MCTS Converged. Safest path: '{best_action_name}'", "success")
-
-        # 4. LLM CRISIS RESOLUTION
-        await streamer.broadcast("CrisisAgent", "Fusing MCTS physics data into human-readable schedule mitigation...", "thinking")
-        mock_current_schedule = [{"session": "Hacking Phase 1", "time": "11:00 AM"}]
-        
-        enhanced_crisis_prompt = f"""
-        CRISIS: {crisis_desc}
-        HISTORICAL CONTEXT: {past_crises}
-        MCTS OPTIMAL ACTION: Our Monte Carlo simulations proved that the strategy '{best_action_name}' is the safest route.
-        
-        You MUST build your final mitigation strategy around this MCTS Optimal Action.
-        """
-        
-        solution = await self.crisis.resolve(enhanced_crisis_prompt, mock_current_schedule)
-        
-        mitigation_text = solution.get('mitigation_strategy', 'Adjusting timeline dynamically.')
-        await streamer.broadcast("SchedulerAgent", f"Applying fixes: {mitigation_text}", "simulating")
-        new_schedule = self.scheduler.recalculate(solution)
-        
-        # 5. COMMIT TO MEMORY & ALERT
-        store_memory(f"Event: {event_name} | Crisis: {crisis_desc} | MCTS Action: {best_action_name} | Mitigation: {mitigation_text}")
-        
-        await streamer.broadcast("EmailAgent", "Crisis override: Blasting urgent updates to participants...", "warning")
-
-        csv_content = crisis_data.get("csv_content", "") 
-        emergency_logs = self.email.send_invites(csv_content, f"URGENT EVENT UPDATE: {mitigation_text}")
-        
-        await streamer.broadcast("Orchestrator", "Crisis resolved. Knowledge stored in VectorDB.", "success")
-        
-        return {
-            "status": "Resolved & Participants Notified",
-            "crisis_injected": crisis_desc, 
-            "applied_solution": solution, 
-            "new_schedule": new_schedule,
-            "emergency_emails_sent": emergency_logs
-        }
-
 
     def get_event_details(self, thread_id):
-        """Fetches the final schedule, marketing, and emails for the dashboard."""
         self.thread_config = {"configurable": {"thread_id": thread_id}}
-        
-        # Pull the frozen memory state directly from LangGraph's SQLite saver
         state = self.graph.get_state(self.thread_config)
-        
-        if not state or not hasattr(state, 'values'):
-            return {"error": "Thread not found or event not finished."}
-            
+        if not state or not hasattr(state, 'values'): return {"error": "Thread not found or event not finished."}
+        agent_outputs = state.values.get("agent_outputs", {})
         return {
             "thread_id": thread_id,
             "schedule": state.values.get("schedule", []),
-            "marketing_copy": state.values.get("marketing_copy", ""),
-            "email_logs": state.values.get("email_logs", []),
-            "agent_outputs": state.values.get("agent_outputs", {})
+            "marketing_copy": agent_outputs.get("marketing", []),
+            "email_logs": agent_outputs.get("emails", []),
+            "agent_outputs": agent_outputs
         }

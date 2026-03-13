@@ -17,3 +17,6 @@ scikit-learn
 networkx
 duckduckgo-search
 langchain-community
+
+langchain-core
+

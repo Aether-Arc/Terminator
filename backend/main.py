@@ -5,7 +5,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from orchestrator.orchestrator import EventOrchestrator
 from realtime.websocket_stream import swarm_streamer
-
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 # --- PRE-FLIGHT DIAGNOSTICS ---
 from memory.redis_memory import store_state, get_state
 from memory.vector_store import store_memory, search_memory
@@ -194,3 +194,19 @@ async def edit_via_prompt(request: Request):
 async def edit_manual(request: Request):
     data = await request.json()
     return await orchestrator.manual_override(data, websocket_streamer)
+
+@app.post("/api/chat")
+async def handle_smart_chat(request: Request):
+    data = await request.json()
+    thread_id = data.get("thread_id")
+    prompt = data.get("prompt_text")
+    
+    # The Orchestrator's 'route_user_intent' decides: 
+    # Is this a micro-edit? A send command? Or a full replan?
+    result = await orchestrator.route_user_intent(thread_id, prompt, streamer)
+    return result
+
+@app.post("/api/approve")
+async def approve_event(request: Request):
+    data = await request.json()
+    return await orchestrator.approve_plan(data.get("thread_id"), streamer)
