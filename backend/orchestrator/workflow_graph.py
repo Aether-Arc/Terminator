@@ -37,7 +37,7 @@ class WorkerState(TypedDict):
     event_data: dict
     schedule: list
 
-def build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent,resource_agent):
+def build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent,resource_agent, design_agent):
     sub_workflow = StateGraph(ExecutionState)
 
     async def master_orchestrator(state: ExecutionState):
@@ -51,7 +51,8 @@ def build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_age
             {"domain": "sponsor", "specifics": "Draft Tier 1 Tech Sponsors Pitch"},
             {"domain": "resource", "specifics": "Allocate physical rooms for all sessions"},
             {"domain": "comms", "specifics": "Draft Initial Welcome Invite (Email & WhatsApp)"},
-            {"domain": "comms", "specifics": "Draft Reminder Blast for Day Of Event"}
+            {"domain": "comms", "specifics": "Draft Reminder Blast for Day Of Event"},
+            {"domain": "design", "specifics": "Create 3 visual social media promo cards"} # 🚀 Add the new task
         
         ]
         return {"dynamic_tasks": tasks_to_spawn}
@@ -85,6 +86,8 @@ def build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_age
             result = await volunteer_agent.assign_shifts(state["event_data"], state["schedule"], specifics)
         elif domain == "sponsor":
             result = await sponsor_agent.draft_sponsorships(state["event_data"], specifics)
+        elif domain == "design":
+            result = await design_agent.generate_cards(state["event_data"], specifics) # 🚀 Route it
         else:
             result = f"Completed unknown task: {specifics}"
 
@@ -102,7 +105,7 @@ def build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_age
 
 # --- 3. BUILD THE STREAMLINED MAIN GRAPH ---
 # Note: Added 'updater_agent' to the dependencies
-def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, updater_agent,  resource_agent):
+def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, updater_agent,  resource_agent, design_agent):
     workflow = StateGraph(GraphState, context_schema=Context)
 
     async def run_planner(state: GraphState, runtime: Runtime[Context]) -> Command[Literal["scheduler"]]:
@@ -147,7 +150,8 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
         outputs = {
             "marketing": [w for w in latest_work if w["domain"] == "marketing"],
             "comms": [w for w in latest_work if w["domain"] == "comms"],
-            "operations": [w for w in latest_work if w["domain"] not in ["marketing", "comms"]]
+            "design": [w for w in latest_work if w["domain"] == "design"], # 🚀 Expose the output
+            "operations": [w for w in latest_work if w["domain"] not in ["marketing", "comms", "design"]]
         }
         
         return Command(update={"agent_outputs": outputs}, goto="human_review")
@@ -209,7 +213,7 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
     workflow.add_node("planner", run_planner)
     workflow.add_node("scheduler", run_scheduler)
     
-    execution_subgraph = build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, resource_agent)
+    execution_subgraph = build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, resource_agent, design_agent)
     workflow.add_node("execution_phase", execution_subgraph)
     workflow.add_node("finalize", finalize_results)
     

@@ -16,6 +16,7 @@ from agents.sponsor_agent import SponsorAgent
 from agents.comms_agent import CommsAgent
 from orchestrator.workflow_graph import build_graph, Context
 from tools.csv_parser import parse_messy_csv
+from agents.design_agent import DesignAgent
 
 from langchain_openai import ChatOpenAI
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, CLOUD_MODEL
@@ -37,10 +38,11 @@ class EventOrchestrator:
         self.sponsor = SponsorAgent()
         self.updater_agent = UpdaterAgent()
         self.comms = CommsAgent() # 🚀 Omnichannel Comms Agent
+        self.design = DesignAgent()
         
         self.graph = build_graph(
             self.planner, self.scheduler, self.marketing,
-            self.comms, self.budget, self.volunteer, self.sponsor, self.updater_agent
+            self.comms, self.budget, self.volunteer, self.sponsor, self.updater_agent,  self.design
         )
         
         self.user_context = Context(user_id="user_anmol") 

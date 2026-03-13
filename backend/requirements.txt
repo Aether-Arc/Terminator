@@ -19,4 +19,4 @@ duckduckgo-search
 langchain-community
 
 langchain-core
-
+twilio
