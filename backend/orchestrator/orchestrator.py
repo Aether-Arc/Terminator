@@ -13,19 +13,22 @@ from learning.policy_memory import RLPolicyMemory
 from orchestrator.workflow_graph import build_graph
 from memory.vector_store import search_memory, store_memory
 
-# 🧠 DEEPMIND IMPORTS (Planning & Simulation)
 from planning.monte_carlo_planner import MonteCarloPlanner
 from planning.strategy_generator import StrategyGenerator
 
-# 🌟 NEW MODULAR AGENT IMPORTS
 from agents.budget_agent import BudgetAgent
 from agents.volunteer_agent import VolunteerAgent
 from agents.sponsor_agent import SponsorAgent
 from ml_models.attendance_predictor import AttendancePredictor
+from agents.comms_agent import CommsAgent
+
+# 👇 --- HIGHLIGHT: IMPORT THE NEW LEDGER MANAGER & CSV PARSER --- 👇
+from memory.ledger_manager import LedgerManager
+from tools.csv_parser import parse_messy_csv
+# 👆 ------------------------------------------------------------- 👆
 
 class EventOrchestrator:
     def __init__(self):
-        # 1. Initialize Core Agents
         self.planner = PlannerAgent()
         self.scheduler = SchedulerAgent()
         self.marketing = MarketingAgent()
@@ -34,41 +37,30 @@ class EventOrchestrator:
         self.critic = CriticAgent()
         self.crisis = CrisisAgent()
         
-        # 2. Initialize Advanced/Optional Agents & ML Models
         self.budget = BudgetAgent()
         self.volunteer = VolunteerAgent()
         self.sponsor = SponsorAgent()
         self.attendance_ml = AttendancePredictor()
         
+        self.comms = CommsAgent()
         self.mcts = MonteCarloPlanner(self.world_model)
         self.strategy_gen = StrategyGenerator()
         
-        # 3. Pass ALL agents into the dynamic autonomous graph
         self.graph = build_graph(
-            self.planner,
-            self.critic,
-            self.scheduler,
-            self.marketing,
-            self.email, 
-            self.world_model,
-            self.budget,
-            self.volunteer,
-            self.attendance_ml,
-            self.sponsor
+            self.planner, self.critic, self.scheduler, self.marketing,
+            self.email, self.world_model, self.budget, self.volunteer,
+            self.attendance_ml, self.sponsor
         )
 
     def get_thread_history(self):
-        """Scans the SQLite database to find all historical chat/event threads."""
         db_path = os.path.join(os.getcwd(), "memory", "swarm_threads.sqlite")
         if not os.path.exists(db_path): 
             return []
-            
         try:
             with sqlite3.connect(db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT DISTINCT thread_id FROM checkpoints")
                 rows = cursor.fetchall()
-                # Return the list of unique thread IDs
                 return [row[0] for row in rows]
         except Exception as e:
             print(f"DB Read Error: {e}")
@@ -78,29 +70,43 @@ class EventOrchestrator:
         await streamer.broadcast("Orchestrator", "Initializing Swarm Sequence...", "thinking")
 
         if not thread_id:
-            thread_id = f"evt_{str(uuid.uuid4())[:8]}"
+            thread_id = "event_thread_1"
         
-        # Thread ID tells LangGraph exactly where to store this event's memory
         self.thread_config = {"configurable": {"thread_id": thread_id}}
         
+        # 👇 --- HIGHLIGHT: INITIALIZE THE LEDGER & INGEST THE CSV --- 👇
+        await streamer.broadcast("Orchestrator", "Spinning up Master Event Ledger...", "simulating")
+        ledger_manager = LedgerManager(thread_id)
+        
+        # If the user uploaded a CSV, parse it and save it directly to the Master Ledger
+        csv_content = event_data.get("csv_content", "")
+        if csv_content:
+            await streamer.broadcast("Orchestrator", "Parsing raw CSV data into Ledger...", "thinking")
+            parsed_contacts = parse_messy_csv(csv_content)
+            await ledger_manager.update_ledger("participants", parsed_contacts)
+            await streamer.broadcast("Orchestrator", f"Saved {len(parsed_contacts)} participants to Ledger.", "success")
+        
+        # Read the newly constructed ledger so we can pass it into the AI Graph
+        current_ledger = await ledger_manager.read_ledger()
+        # 👆 ------------------------------------------------------------- 👆
+
         initial_state = {
+            "master_ledger": current_ledger, # <--- Passed into the swarm here!
             "event_data": event_data,
             "iterations": 0,
             "candidates": [],
             "plan": {},
             "score": 0,
             "requires_approval": False,
-            "agent_outputs": {}
+            "agent_outputs": {},
+            "audit_log": [],
+            "global_constraints": ""
         }
         
         await streamer.broadcast("SwarmNetwork", "Executing adaptive reasoning graph...", "simulating")
-        
-        # Run graph until it hits the interrupt_before=["supervisor"] breakpoint
         final_state = await self.graph.ainvoke(initial_state, config=self.thread_config)
-        
         await streamer.broadcast("Orchestrator", "Schedule Drafted. Pausing Swarm for Human Approval.", "warning")
         
-        # FIX: final_state is a dict, so we use .get() directly on it!
         return {
             "thread_id": thread_id,
             "workflow_executed": True,
@@ -111,35 +117,21 @@ class EventOrchestrator:
         }
     
     async def fork_and_update(self, thread_id, new_prompt, streamer):
-        """Rewinds time, injects a new user prompt, and forces the Swarm to replan."""
         self.thread_config = {"configurable": {"thread_id": thread_id}}
         await streamer.broadcast("Orchestrator", f"TIME TRAVEL INITIATED: Rewinding state for {thread_id}...", "warning")
         
-        # 1. Fetch the frozen state from the SQLite hard drive
         current_state = self.graph.get_state(self.thread_config)
         event_data = current_state.values.get("event_data", {})
-        
-        # 2. Inject the user's new prompt/constraint into the event memory
-        # FIX 3: Route to 'user_constraints' instead of 'marketing_prompt'
         event_data["user_constraints"] = event_data.get("user_constraints", "") + f" \nNEW ORGANIZER CONSTRAINT: {new_prompt}"
         
-        # 3. STATE SPOOFING: We update the state *acting as the Critic Node*. 
-        # FIX 4: Explicitly wipe the old plan and schedule to prevent UI crashes/blanking
         self.graph.update_state(
             self.thread_config,
-            {
-                "event_data": event_data, 
-                "score": 0, 
-                "iterations": 0,
-                "plan": {},         # <--- WIPES OLD DATA
-                "schedule": []      # <--- WIPES OLD DATA
-            },
+            {"event_data": event_data, "score": 0, "iterations": 0, "plan": {}, "schedule": []},
             as_node="critic"
         )
         
         await streamer.broadcast("CriticAgent", f"Applying new constraint: '{new_prompt}'. Routing back to Planner.", "simulating")
         
-        # 4. Resume execution from the newly forked past
         async for event in self.graph.astream(None, config=self.thread_config):
             for node_name, state_update in event.items():
                 await streamer.broadcast(node_name.capitalize(), "Autonomously replanning...", "simulating")
@@ -155,12 +147,10 @@ class EventOrchestrator:
     async def approve_plan(self, event_data, streamer):
         await streamer.broadcast("Orchestrator", "Human intervention received. Processing...", "success")
         
-        # 1. TIME TRAVEL / STATE FORCING (If the human edited the plan)
         edited_plan = event_data.get("edited_plan")
         if edited_plan:
             await streamer.broadcast("Orchestrator", "Human edit detected. Routing back to Simulation Engine...", "warning")
             self.graph.update_state(self.thread_config, {"plan": edited_plan}, as_node="planner")
-            
             async for event in self.graph.astream(None, config=self.thread_config):
                 for node_name, state_update in event.items():
                     await streamer.broadcast(node_name.capitalize(), f"Simulating human-edited plan physics...", "simulating")
@@ -176,40 +166,36 @@ class EventOrchestrator:
 
         await streamer.broadcast("Orchestrator", "Plan approved. Engaging Autonomous Execution Network...", "simulating")
         
-        # --- NEW: DYNAMIC AGENT INJECTION ---
         new_agents_requested = event_data.get("add_agents", []) 
         if new_agents_requested:
-            # Add this to the event_data state so the Supervisor sees it when it wakes up
             event_data["requested_agents"] = new_agents_requested
             self.graph.update_state(self.thread_config, {"event_data": event_data})
             await streamer.broadcast("Orchestrator", f"Organizer requested dynamic injection of: {new_agents_requested}.", "warning")
 
-        # 2. TRUE PARALLEL ASYNC EXECUTION (Hybrid Swarm Speedup)
-        # We bypass the sequential LangGraph router here and fire all local agents simultaneously
         await streamer.broadcast("SupervisorAgent", "Dynamically firing local GPU agents in parallel...", "thinking")
         
-        # Fetch current state
         current_state = self.graph.get_state(self.thread_config).values
         evt_data = current_state.get("event_data", event_data)
         final_schedule = current_state.get("schedule", [])
-        evt_data["schedule"] = final_schedule # Marketing needs this injected
+        evt_data["schedule"] = final_schedule 
         
-        # Broadcast active execution UI
+        # 👇 --- HIGHLIGHT: SAVE FINAL SCHEDULE TO LEDGER --- 👇
+        ledger_manager = LedgerManager(self.thread_config["configurable"]["thread_id"])
+        await ledger_manager.update_ledger("schedule", final_schedule)
+        # 👆 ------------------------------------------------ 👇
+        
         for agent_node in ["marketing", "budget", "volunteer", "sponsor", "email", "attendance_ml"]:
             await streamer.broadcast(agent_node.capitalize(), "Autonomously executing task in parallel...", "simulating")
 
-        # Fire all local GPU tasks at the exact same time
         marketing_task = self.marketing.generate_campaign(evt_data)
         budget_task = self.budget.calculate(evt_data)
         volunteer_task = self.volunteer.assign_shifts(evt_data, final_schedule)
         sponsor_task = self.sponsor.draft_sponsorships(evt_data)
         
-        # Gather async results simultaneously
         marketing_assets, budget_res, volunteer_res, sponsor_res = await asyncio.gather(
             marketing_task, budget_task, volunteer_task, sponsor_task
         )
         
-        # Run synchronous models (Email & ML predictors)
         email_logs = self.email.send_invites(evt_data.get("csv_content", ""), "Your optimal schedule is locked!")
         attendance_forecast = self.attendance_ml.predict_attendance(evt_data.get("expected_crowd", 500))
         
@@ -220,18 +206,22 @@ class EventOrchestrator:
             "attendance_forecast": attendance_forecast
         }
         
-        # Save final execution state back to graph memory
+        # 👇 --- HIGHLIGHT: DUMP PARALLEL AGENT RESULTS TO LEDGER --- 👇
+        await ledger_manager.update_ledger("budget", budget_res)
+        await ledger_manager.update_ledger("volunteers", volunteer_res)
+        await ledger_manager.update_ledger("sponsors", sponsor_res)
+        await ledger_manager.update_ledger("marketing_assets", {"copy": marketing_assets, "emails": email_logs})
+        # 👆 -------------------------------------------------------- 👆
+        
         self.graph.update_state(self.thread_config, {
             "marketing_copy": marketing_assets,
             "email_logs": email_logs,
             "agent_outputs": agent_outputs
         })
         
-        # 3. SELF-IMPROVEMENT LOOP
         event_name = event_data.get("name", "Unknown Event")
         crowd = event_data.get("expected_crowd", "Unknown")
-        memory_string = f"SUCCESSFUL EVENT '{event_name}' ({crowd} attendees). Schedule used: {final_schedule}. Marketing used: {marketing_assets}"
-        store_memory(memory_string)
+        store_memory(f"SUCCESSFUL EVENT '{event_name}' ({crowd} attendees). Schedule used: {final_schedule}. Marketing used: {marketing_assets}")
         
         await streamer.broadcast("RLPolicyMemory", "Experience stored. Self-improvement weights updated.", "success")
         await streamer.broadcast("Orchestrator", "All operational phases autonomously completed.", "idle")
@@ -245,43 +235,48 @@ class EventOrchestrator:
         }
 
     async def manual_override(self, override_data, streamer):
-        """Allows the user to forcefully edit the locked schedule or inject a custom crisis."""
         action_type = override_data.get("override_type") 
         
         if action_type == "edit_schedule":
             await streamer.broadcast("Orchestrator", "Manual schedule override initiated by Organizer.", "error")
             new_schedule = override_data.get("new_schedule", [])
             
-            # Wake up the EmailAgent to blast the manual update
-            await streamer.broadcast("EmailAgent", "Notifying participants of manual schedule change...", "thinking")
-            logs = self.email.send_invites(
+            await streamer.broadcast("CommsAgent", "Notifying participants of manual schedule change...", "thinking")
+            result = await self.comms.execute_broadcast(
                 csv_content=override_data.get("csv_content", ""), 
-                base_draft="URGENT: The event schedule has been manually updated by the organizer. Please check the live dashboard for the new timings."
+                command="The event schedule has been manually updated by the organizer. Please check the live dashboard for the new timings. Use both Email and Whatsapp.",
+                event_context="Routine schedule modification."
             )
             
             await streamer.broadcast("Orchestrator", "Manual override complete. Participants notified.", "success")
-            return {"status": "Schedule manually updated", "new_schedule": new_schedule, "emails_sent": len(logs)}
+            return {"status": "Schedule manually updated", "new_schedule": new_schedule, "comms_result": result}
             
         elif action_type == "custom_crisis":
-            # Route custom user text directly into our Monte Carlo crisis engine
             crisis_desc = override_data.get("description", "A custom emergency has occurred.")
             await streamer.broadcast("Orchestrator", f"CUSTOM CRISIS INJECTED: {crisis_desc}", "error")
-            
-            # We reuse our existing robust handle_crisis pipeline
             return await self.handle_crisis(override_data, streamer, "manual_trigger")
+            
+        elif action_type == "broadcast":
+            command = override_data.get("description", "Send an update.")
+            csv_content = override_data.get("csv_content", "")
+            
+            await streamer.broadcast("CommsAgent", "Analyzing broadcast command & parsing CSV...", "thinking")
+            result = await self.comms.execute_broadcast(
+                csv_content=csv_content, 
+                command=command, 
+                event_context="Organizer initiated manual broadcast."
+            )
+            await streamer.broadcast("CommsAgent", f"Broadcast complete across requested channels.", "success")
+            return result
             
         return {"error": "Unknown override type."}
     
     async def resume_event(self, streamer):
-        """Pulls the exact state from SQLite and resumes execution after a server crash."""
         await streamer.broadcast("Orchestrator", "CRASH RECOVERY INITIATED: Loading SQLite Checkpoint...", "warning")
-        
-        # We target the exact same thread we used before
         self.thread_config = {"configurable": {"thread_id": "event_thread_1"}}
         
-        # 1. Inspect the saved state before we start
         saved_state = self.graph.get_state(self.thread_config)
-        next_agent = saved_state.next # LangGraph tells us exactly who is next in line!
+        next_agent = saved_state.next 
         
         if not next_agent:
             await streamer.broadcast("Orchestrator", "Thread is already fully completed. Nothing to resume.", "idle")
@@ -289,7 +284,6 @@ class EventOrchestrator:
 
         await streamer.broadcast("Orchestrator", f"Found saved state! Resuming execution at: {next_agent[0].capitalize()}", "success")
         
-        # 2. Pass 'None' to instantly resume the graph from the exact point of failure
         async for event in self.graph.astream(None, config=self.thread_config):
             for node_name, state_update in event.items():
                 if node_name == "supervisor":
@@ -297,12 +291,10 @@ class EventOrchestrator:
                 else:
                     await streamer.broadcast(node_name.capitalize(), "Autonomously executing task...", "simulating")
 
-        # 3. Fetch the recovered final results
         final_state = self.graph.get_state(self.thread_config)
         agent_outputs = final_state.values.get("agent_outputs", {})
         
         await streamer.broadcast("Orchestrator", "Recovery successful. All operations completed.", "idle")
-        
         return {
             "status": "recovered_and_completed",
             "schedule": final_state.values.get("schedule", []),
@@ -310,35 +302,25 @@ class EventOrchestrator:
             "agent_outputs": agent_outputs
         }
     
-    
-
     async def handle_crisis(self, crisis_data, streamer, crisis_event):
         crisis_desc = crisis_data.get('description', 'Unknown anomaly detected.')
         event_name = crisis_data.get("event_name", "the current event") 
         crowd_size = crisis_data.get("expected_crowd", 500)
         
         await streamer.broadcast("Orchestrator", f"CRISIS DETECTED: {crisis_desc}", "error")
-        
-        # 1. VECTOR DB SEARCH
         await streamer.broadcast("WorldModelAgent", "Querying VectorDB for historical crisis data...", "simulating")
         search_query = f"Crisis: {crisis_desc} during event: {event_name}"
         past_crises = search_memory(search_query)
         
-        # 2. STRATEGY GENERATION (AI dynamically invents options)
         await streamer.broadcast("StrategyGenerator", "Inventing context-aware mitigation strategies...", "thinking")
         possible_actions = await self.strategy_gen.generate(crisis_desc, crowd_size)
         
-        # 3. MONTE CARLO TREE SEARCH (Simulating the AI's ideas)
         await streamer.broadcast("MonteCarloPlanner", f"Running 100x physics simulations on proposed strategies...", "simulating")
-        base_state = {"delay": 0, "crowd_size": crowd_size}
-        
-        # MCTS finds which of the LLM's ideas was mathematically the safest
         best_math_action = self.mcts.plan(possible_actions, simulations=100)
         best_action_name = best_math_action.get("name", "Dynamic Reschedule")
         
         await streamer.broadcast("MonteCarloPlanner", f"MCTS Converged. Safest path: '{best_action_name}'", "success")
 
-        # 4. LLM CRISIS RESOLUTION
         await streamer.broadcast("CrisisAgent", "Fusing MCTS physics data into human-readable schedule mitigation...", "thinking")
         mock_current_schedule = [{"session": "Hacking Phase 1", "time": "11:00 AM"}]
         
@@ -346,24 +328,25 @@ class EventOrchestrator:
         CRISIS: {crisis_desc}
         HISTORICAL CONTEXT: {past_crises}
         MCTS OPTIMAL ACTION: Our Monte Carlo simulations proved that the strategy '{best_action_name}' is the safest route.
-        
         You MUST build your final mitigation strategy around this MCTS Optimal Action.
         """
         
         solution = await self.crisis.resolve(enhanced_crisis_prompt, mock_current_schedule)
-        
         mitigation_text = solution.get('mitigation_strategy', 'Adjusting timeline dynamically.')
         await streamer.broadcast("SchedulerAgent", f"Applying fixes: {mitigation_text}", "simulating")
         new_schedule = self.scheduler.recalculate(solution)
         
-        # 5. COMMIT TO MEMORY & ALERT
         store_memory(f"Event: {event_name} | Crisis: {crisis_desc} | MCTS Action: {best_action_name} | Mitigation: {mitigation_text}")
         
-        await streamer.broadcast("EmailAgent", "Crisis override: Blasting urgent updates to participants...", "warning")
-
+        await streamer.broadcast("CommsAgent", "Crisis override: Blasting urgent updates across all relevant channels...", "warning")
         csv_content = crisis_data.get("csv_content", "") 
-        emergency_logs = self.email.send_invites(csv_content, f"URGENT EVENT UPDATE: {mitigation_text}")
+        broadcast_result = await self.comms.execute_broadcast(
+            csv_content=csv_content,
+            command=f"Send an urgent update via email and whatsapp to all participants detailing this mitigation plan: {mitigation_text}",
+            event_context=f"Crisis Resolution for: {crisis_desc}"
+        )
         
+        emergency_logs = broadcast_result.get("logs", [])
         await streamer.broadcast("Orchestrator", "Crisis resolved. Knowledge stored in VectorDB.", "success")
         
         return {
@@ -371,15 +354,11 @@ class EventOrchestrator:
             "crisis_injected": crisis_desc, 
             "applied_solution": solution, 
             "new_schedule": new_schedule,
-            "emergency_emails_sent": emergency_logs
+            "emergency_logs": emergency_logs
         }
 
-
     def get_event_details(self, thread_id):
-        """Fetches the final schedule, marketing, and emails for the dashboard."""
         self.thread_config = {"configurable": {"thread_id": thread_id}}
-        
-        # Pull the frozen memory state directly from LangGraph's SQLite saver
         state = self.graph.get_state(self.thread_config)
         
         if not state or not hasattr(state, 'values'):

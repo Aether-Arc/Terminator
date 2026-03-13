@@ -1,7 +1,9 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import os
+import json
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from orchestrator.orchestrator import EventOrchestrator
 from realtime.websocket_stream import swarm_streamer
@@ -176,8 +178,6 @@ async def get_thread_state(thread_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-
-
 # GET /api/history/{thread_id}
 @app.get("/api/history/{thread_id}")
 async def get_history(thread_id: str):
@@ -187,10 +187,27 @@ async def get_history(thread_id: str):
 @app.post("/api/edit/prompt")
 async def edit_via_prompt(request: Request):
     data = await request.json()
-    return await orchestrator.fork_and_update(data["thread_id"], data["prompt_text"], websocket_streamer)
+    return await orchestrator.fork_and_update(data["thread_id"], data["prompt_text"], swarm_streamer)
 
 # POST /api/edit/manual
 @app.post("/api/edit/manual")
 async def edit_manual(request: Request):
     data = await request.json()
-    return await orchestrator.manual_override(data, websocket_streamer)
+    return await orchestrator.manual_override(data, swarm_streamer)
+
+# 👇 --- HIGHLIGHT: NEW ENDPOINT FOR THE CENTRAL AI BRAIN (THE LEDGER) --- 👇
+@app.get("/api/ledger/{thread_id}")
+async def get_master_ledger(thread_id: str):
+    """Returns the entire centralized event state for the UI."""
+    filepath = f"memory/ledgers/{thread_id}_master.json"
+    
+    if not os.path.exists(filepath):
+        # If it doesn't exist yet, return a graceful empty state
+        return {"error": "Ledger not found", "is_empty": True}
+        
+    try:
+        with open(filepath, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read ledger: {e}")
+# 👆 -------------------------------------------------------------------- 👆

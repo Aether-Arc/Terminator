@@ -39,7 +39,7 @@ class PlannerAgent:
                 "content": "Emergency Fallback"
             }
 
-    async def generate_multiple_plans(self, event_data, count=3):
+    async def generate_multiple_plans(self, event_data, count=1):
         event_name = event_data.get('name', 'Hackathon')
         crowd = event_data.get('expected_crowd', 500)
         history = event_data.get("historical_context", "No past data.")
@@ -51,7 +51,7 @@ class PlannerAgent:
         tasks = []
         for i in range(count):
             prompt = f"""
-            You are an elite, highly adaptable event architect planning '{event_name}' for {crowd} people.
+            You are an elite, highly adaptable event architect, planning '{event_name}' for {crowd} people.
             
             🔥 CRITICAL USER CONSTRAINTS (OBEY STRICTLY):
             {user_constraints}

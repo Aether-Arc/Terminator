@@ -1,13 +1,8 @@
 from langgraph.graph import StateGraph, END
-
 from langgraph.checkpoint.sqlite import SqliteSaver # 🚀 UPGRADED CHECKPOINTER
-
 from typing import TypedDict, Any, List, Annotated
-
 import operator
-
 import sqlite3
-
 import os
 from memory.vector_store import search_memory
 from learning.policy_memory import RLPolicyMemory
@@ -18,6 +13,10 @@ from orchestrator.task_manager import TaskManager
 from orchestrator.reflection_loop import ReflectionLoop
 
 class GraphState(TypedDict):
+    # 👇 --- HIGHLIGHT: THE NEW MASTER LEDGER (BLACKBOARD) --- 👇
+    master_ledger: dict  
+    # 👆 ----------------------------------------------------- 👆
+    
     event_data: dict
     candidates: List[dict]
     plan: dict
@@ -27,16 +26,11 @@ class GraphState(TypedDict):
     requires_approval: bool
         
     # 🚀 NEW: THE IMMUTABLE SCRATCHPAD
-    # Using Annotated with operator.add means agents CANNOT overwrite this list.
-    # Every time an agent returns {"audit_log": ["Did X"]}, it appends to the history.
     audit_log: Annotated[List[str], operator.add] 
     
     # 🚀 NEW: GLOBAL DIRECTIVES
-    # This string is passed to every single agent so they never "forget" the core rules
-    # no matter how long the conversation gets.
     global_constraints: str 
     
-
     past_context: str 
     critic_feedback: str 
     simulation_metrics: Any 
@@ -138,7 +132,6 @@ def build_graph(planner, critic, scheduler, marketing, email, world_model, budge
         workflow.add_edge(agent, "queue_manager")
 
     # 🚀 THE HACKATHON CHEAT CODE: Async-to-Sync Checkpointer Bridge
-    # This bypasses the need for `aiosqlite` and complex context managers
     from langgraph.checkpoint.sqlite import SqliteSaver
     
     class AsyncSqliteSaverBridge(SqliteSaver):
@@ -155,7 +148,6 @@ def build_graph(planner, critic, scheduler, marketing, email, world_model, budge
     os.makedirs(os.path.join(os.getcwd(), "memory"), exist_ok=True)
     db_path = os.path.join(os.getcwd(), "memory", "swarm_threads.sqlite")
     
-    # check_same_thread=False allows our async FastAPI routes to access it safely
     conn = sqlite3.connect(db_path, check_same_thread=False)
     
     # Attach our custom bridge class!
