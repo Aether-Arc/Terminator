@@ -361,3 +361,30 @@ async def approve_event(request: Request):
     payload = {"action": "approve"}
 
     return await resume_graph(thread_id, payload)
+
+@app.get("/api/ledger/{thread_id}")
+async def get_master_ledger(thread_id: str):
+    """Returns the entire centralized event state for the UI directly from LangGraph Memory."""
+    try:
+        # 1. Target the specific thread in LangGraph's memory
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # 2. Fetch the state from the SqliteSaver
+        state = orchestrator.graph.get_state(config)
+        
+        # 3. If there are no values, the event hasn't started or thread doesn't exist
+        if not state.values:
+            return {"error": "Ledger not found", "is_empty": True}
+            
+        # 4. Return the entire state dictionary as the master ledger
+        return {
+            "thread_id": thread_id,
+            "event_data": state.values.get("event_data", {}),
+            "schedule": state.values.get("schedule", []),
+            "agent_outputs": state.values.get("agent_outputs", {}),
+            "audit_log": state.values.get("audit_log", []),
+            "is_empty": False
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read LangGraph ledger: {e}")

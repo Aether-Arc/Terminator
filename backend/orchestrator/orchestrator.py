@@ -13,16 +13,21 @@ from agents.email_agent import EmailAgent
 from agents.budget_agent import BudgetAgent
 from agents.volunteer_agent import VolunteerAgent
 from agents.sponsor_agent import SponsorAgent
+from agents.comms_agent import CommsAgent
 from orchestrator.workflow_graph import build_graph, Context
+from tools.csv_parser import parse_messy_csv
 
 from langchain_openai import ChatOpenAI
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, CLOUD_MODEL
 from langgraph.types import Command # 🚀 Required to resume from interrupts
-from agents.resource_agent import ResourceAgent
+
+# 🚀 IMPORT YOUR REAL-WORLD SERVICES HERE
+from services.whatsapp_service import send_whatsapp_blast
+# from services.email_service import send_email_blast  <-- Import your email script when ready!
 
 class EventOrchestrator:
     def __init__(self):
-        # 1. Initialize Clean Agents (Removed Physics/Crisis Agents entirely)
+        # 1. Initialize Clean Agents
         self.planner = PlannerAgent()
         self.scheduler = SchedulerAgent()
         self.marketing = MarketingAgent()
@@ -31,11 +36,11 @@ class EventOrchestrator:
         self.volunteer = VolunteerAgent()
         self.sponsor = SponsorAgent()
         self.updater_agent = UpdaterAgent()
-        self.resource = ResourceAgent()
+        self.comms = CommsAgent() # 🚀 Omnichannel Comms Agent
         
         self.graph = build_graph(
             self.planner, self.scheduler, self.marketing,
-            self.email, self.budget, self.volunteer, self.sponsor, self.updater_agent, self.resource
+            self.comms, self.budget, self.volunteer, self.sponsor, self.updater_agent
         )
         
         self.user_context = Context(user_id="user_anmol") 
@@ -59,6 +64,14 @@ class EventOrchestrator:
         if not thread_id: thread_id = f"evt_{str(uuid.uuid4())[:8]}"
         
         self.thread_config = {"configurable": {"thread_id": thread_id}}
+        raw_csv = event_data.get("csv_content", "")
+        if raw_csv:
+            await streamer.broadcast("Orchestrator", "Parsing messy CSV participant data...", "simulating")
+            clean_participants = await parse_messy_csv(raw_csv)
+            # Inject it into event_data so it lives forever in LangGraph SQLite!
+            event_data["participants"] = clean_participants
+        else:
+            event_data["participants"] = []
         initial_state = {
             "event_data": event_data, "plan": {}, "schedule": [],
             "agent_outputs": {}, "audit_log": [], "completed_work": []
@@ -79,7 +92,7 @@ class EventOrchestrator:
             "selected_plan": final_state.values.get("plan"),
             "schedule": final_state.values.get("schedule"),
             "marketing": agent_outputs.get("marketing", []),
-            "email_outreach_logs": agent_outputs.get("emails", []),
+            "email_outreach_logs": agent_outputs.get("comms", []), # Pointing to comms now
             "agent_outputs": agent_outputs
         }
 
@@ -101,7 +114,7 @@ class EventOrchestrator:
         return {
             "status": "approved_and_completed",
             "marketing": agent_outputs.get("marketing", []),
-            "email_outreach_logs": agent_outputs.get("emails", []),
+            "email_outreach_logs": agent_outputs.get("comms", []),
             "operations": agent_outputs.get("operations", [])
         }
 
@@ -110,8 +123,6 @@ class EventOrchestrator:
         self.thread_config = {"configurable": {"thread_id": thread_id}}
         await streamer.broadcast("Orchestrator", f"Sending constraints to Planner for {thread_id}...", "warning")
         
-        # 🚀 Resume the interrupted graph with the user's feedback text!
-        # The human_review node will catch this text, append it to constraints, and route to planner.
         async for chunk in self.graph.astream(Command(resume=new_prompt), config=self.thread_config, stream_mode="updates", version="v2", context=self.user_context):
             if chunk["type"] == "updates":
                 for node_name, state_update in chunk["data"].items():
@@ -150,43 +161,73 @@ class EventOrchestrator:
         elif "CANCELLATION" in intent:
             return await self.handle_cancellation(thread_id, streamer)
         else:
-            # Default to the LangGraph "fork_and_update" for major changes
             return await self.fork_and_update(thread_id, user_prompt, streamer)
 
     async def dispatch_outputs(self, thread_id, streamer):
-        """Action: Marks drafted emails as 'SENT' without touching the graph logic."""
+        """Action: Physically sends the emails/whatsapps and updates state to SENT."""
         self.thread_config = {"configurable": {"thread_id": thread_id}}
-        await streamer.broadcast("EmailAgent", "Connecting to SMTP... Dispatching drafted notices.", "simulating")
+        await streamer.broadcast("CommsAgent", "Executing Omnichannel Broadcast...", "simulating")
         
         state = self.graph.get_state(self.thread_config)
         agent_outputs = state.values.get("agent_outputs", {})
-        emails = agent_outputs.get("emails", [])
+        comms_drafts = agent_outputs.get("comms", [])
         
-        # Update status to SENT
-        for email in emails:
-            email["status"] = "SENT"
+        # We need the participant list to send the actual messages!
+        event_data = state.values.get("event_data", {})
+        participants = event_data.get("participants", []) # Or parse it from event_data.get("csv_content")
+
+        if not participants:
+            await streamer.broadcast("Orchestrator", "WARNING: No participants found. Cannot dispatch.", "error")
+            return {"error": "No participants found."}
+        
+        if not comms_drafts:
+            return {"error": "No communications drafted yet."}
             
-        # Update the state directly (Durable Execution)
+        dispatch_logs = []
+            
+        # Update status to SENT & TRIGGER EXTERNAL APIs
+        for draft in comms_drafts:
+            payload = draft.get("output", {})
+            
+            # Skip if already sent to avoid double-texting
+            if payload.get("status") == "SENT":
+                continue
+                
+            payload["status"] = "SENT"
+            
+            # 🚀 EXECUTE WHATSAPP ASYNC
+            if payload.get("use_whatsapp") and participants:
+                await streamer.broadcast("CommsAgent", "Connecting to Twilio...", "simulating")
+                try:
+                    wa_logs = await send_whatsapp_blast(participants, payload.get("whatsapp_body", ""))
+                    dispatch_logs.extend(wa_logs)
+                    for log in wa_logs:
+                        await streamer.broadcast("WhatsApp", log, "success" if "✅" in log else "error")
+                except Exception as e:
+                    print(f"Twilio Error: {e}")
+
+            # 🚀 EXECUTE EMAIL ASYNC (Add when ready)
+            if payload.get("use_email") and participants:
+                await streamer.broadcast("CommsAgent", "Connecting to SMTP...", "simulating")
+                # email_logs = await send_email_blast(participants, payload.get("email_subject"), payload.get("email_body"))
+                # dispatch_logs.extend(email_logs)
+
+        # Update the LangGraph state directly (Durable Execution)
         self.graph.update_state(self.thread_config, {"agent_outputs": agent_outputs})
-        await streamer.broadcast("Orchestrator", "Emails dispatched successfully.", "success")
+        await streamer.broadcast("Orchestrator", "Omnichannel dispatched successfully.", "success")
         
-        return {"status": "dispatched", "email_logs": emails}
+        return {"status": "dispatched", "comms": comms_drafts, "logs": dispatch_logs}
 
     async def handle_cancellation(self, thread_id, streamer):
         """Action: Wipes schedule and triggers the execution phase to draft cancellation copy."""
         self.thread_config = {"configurable": {"thread_id": thread_id}}
         await streamer.broadcast("Orchestrator", "Initiating Cancellation Protocol...", "warning")
         
-        # Update schedule to a 'Cancelled' state
         cancelled_schedule = [{"time": "N/A", "session": "EVENT CANCELLED"}]
         self.graph.update_state(self.thread_config, {"schedule": cancelled_schedule})
         
-        # We resume and tell the graph to run the parallel execution nodes (marketing/email) 
-        # so they generate "We are sorry, the event is cancelled" text.
         return await self.approve_plan(None, streamer)
 
-    
-    
     async def conversational_micro_edit(self, thread_id, user_prompt, streamer):
         """Fast JSON-manipulation for delays without a full replan."""
         self.thread_config = {"configurable": {"thread_id": thread_id}}
@@ -197,8 +238,6 @@ class EventOrchestrator:
         
         if not current_schedule: return {"error": "No schedule exists yet to edit."}
 
-        llm = ChatOpenAI(model=CLOUD_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0)
-        
         editor_prompt = f"""
         You are a precise JSON text editor.
         CURRENT SCHEDULE JSON: {json.dumps(current_schedule)}
@@ -208,17 +247,14 @@ class EventOrchestrator:
         """
         
         await streamer.broadcast("Copilot", "Calculating new timeline physics...", "simulating")
-        response = await llm.ainvoke(editor_prompt)
+        response = await self.llm.ainvoke(editor_prompt)
         
         match = re.search(r'\[.*\]', response.content, re.DOTALL)
         if not match: return {"error": "Failed to parse AI schedule adjustment."}
             
         new_schedule = json.loads(match.group(0))
         
-        # Directly update the state with the shifted schedule.
-        # Since we are paused at 'human_review', the user will see the updated times on their screen!
         self.graph.update_state(self.thread_config, {"schedule": new_schedule})
-        
         await streamer.broadcast("Orchestrator", "Schedule shifted. Click 'Approve' to lock it in.", "success")
         
         return {
@@ -233,7 +269,6 @@ class EventOrchestrator:
             await streamer.broadcast("Orchestrator", "Manual schedule override initiated.", "warning")
             new_schedule = override_data.get("new_schedule", [])
             
-            # Update the state. User can then hit "Approve" (via approve_plan endpoint) to proceed
             self.graph.update_state(self.thread_config, {"schedule": new_schedule})
             await streamer.broadcast("Orchestrator", "Schedule updated in memory. Awaiting approval.", "success")
             
@@ -275,6 +310,6 @@ class EventOrchestrator:
             "thread_id": thread_id,
             "schedule": state.values.get("schedule", []),
             "marketing_copy": agent_outputs.get("marketing", []),
-            "email_logs": agent_outputs.get("emails", []),
+            "email_logs": agent_outputs.get("comms", []),
             "agent_outputs": agent_outputs
         }

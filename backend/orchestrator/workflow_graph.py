@@ -37,7 +37,7 @@ class WorkerState(TypedDict):
     event_data: dict
     schedule: list
 
-def build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sponsor_agent,resource_agent):
+def build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent,resource_agent):
     sub_workflow = StateGraph(ExecutionState)
 
     async def master_orchestrator(state: ExecutionState):
@@ -45,11 +45,13 @@ def build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sp
         tasks_to_spawn = [
             {"domain": "marketing", "specifics": "Twitter Announcement Thread"},
             {"domain": "marketing", "specifics": "LinkedIn Professional Post"},
-            {"domain": "email", "specifics": "Draft Initial Welcome Invite"},
+            
             {"domain": "budget", "specifics": "Calculate Venue & Catering Estimates"},
             {"domain": "volunteer", "specifics": "Assign Registration Desk Shifts"},
             {"domain": "sponsor", "specifics": "Draft Tier 1 Tech Sponsors Pitch"},
-            {"domain": "resource", "specifics": "Allocate physical rooms for all sessions"} 
+            {"domain": "resource", "specifics": "Allocate physical rooms for all sessions"},
+            {"domain": "comms", "specifics": "Draft Initial Welcome Invite (Email & WhatsApp)"},
+            {"domain": "comms", "specifics": "Draft Reminder Blast for Day Of Event"}
         
         ]
         return {"dynamic_tasks": tasks_to_spawn}
@@ -73,8 +75,8 @@ def build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sp
         
         if domain == "marketing":
             result = await marketing.generate_campaign(state["event_data"], specifics)
-        elif domain == "email":
-            result = await email.draft_invites(state["event_data"], state["schedule"], specifics)
+        elif domain == "comms": # 🚀 ROUTE TO COMMS AGENT
+            result = await comms_agent.draft_communications(state["event_data"], state["schedule"], specifics)
         elif domain == "budget":
             result = await budget_agent.calculate(state["event_data"],state["schedule"], specifics)
         elif domain == "resource":
@@ -100,7 +102,7 @@ def build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sp
 
 # --- 3. BUILD THE STREAMLINED MAIN GRAPH ---
 # Note: Added 'updater_agent' to the dependencies
-def build_graph(planner, scheduler, marketing, email, budget_agent, volunteer_agent, sponsor_agent, updater_agent,  resource_agent):
+def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, updater_agent,  resource_agent):
     workflow = StateGraph(GraphState, context_schema=Context)
 
     async def run_planner(state: GraphState, runtime: Runtime[Context]) -> Command[Literal["scheduler"]]:
@@ -144,8 +146,8 @@ def build_graph(planner, scheduler, marketing, email, budget_agent, volunteer_ag
         
         outputs = {
             "marketing": [w for w in latest_work if w["domain"] == "marketing"],
-            "emails": [w for w in latest_work if w["domain"] == "email"],
-            "operations": [w for w in latest_work if w["domain"] not in ["marketing", "email"]]
+            "comms": [w for w in latest_work if w["domain"] == "comms"],
+            "operations": [w for w in latest_work if w["domain"] not in ["marketing", "comms"]]
         }
         
         return Command(update={"agent_outputs": outputs}, goto="human_review")
@@ -207,7 +209,7 @@ def build_graph(planner, scheduler, marketing, email, budget_agent, volunteer_ag
     workflow.add_node("planner", run_planner)
     workflow.add_node("scheduler", run_scheduler)
     
-    execution_subgraph = build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sponsor_agent, resource_agent)
+    execution_subgraph = build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, resource_agent)
     workflow.add_node("execution_phase", execution_subgraph)
     workflow.add_node("finalize", finalize_results)
     
