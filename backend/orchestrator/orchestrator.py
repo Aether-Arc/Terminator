@@ -120,13 +120,20 @@ class EventOrchestrator:
         event_data = current_state.values.get("event_data", {})
         
         # 2. Inject the user's new prompt/constraint into the event memory
-        event_data["marketing_prompt"] = event_data.get("marketing_prompt", "") + f" \nNEW ORGANIZER CONSTRAINT: {new_prompt}"
+        # FIX 3: Route to 'user_constraints' instead of 'marketing_prompt'
+        event_data["user_constraints"] = event_data.get("user_constraints", "") + f" \nNEW ORGANIZER CONSTRAINT: {new_prompt}"
         
         # 3. STATE SPOOFING: We update the state *acting as the Critic Node*. 
-        # By setting the score to 0, LangGraph's conditional edge is forced to route BACK to the Planner!
+        # FIX 4: Explicitly wipe the old plan and schedule to prevent UI crashes/blanking
         self.graph.update_state(
             self.thread_config,
-            {"event_data": event_data, "score": 0, "iterations": 0},
+            {
+                "event_data": event_data, 
+                "score": 0, 
+                "iterations": 0,
+                "plan": {},         # <--- WIPES OLD DATA
+                "schedule": []      # <--- WIPES OLD DATA
+            },
             as_node="critic"
         )
         
@@ -143,7 +150,7 @@ class EventOrchestrator:
             "schedule": final_state.values.get("schedule", []),
             "requires_approval": True,
             "stability_score": final_state.values.get("score", 0)
-        }
+        }   
 
     async def approve_plan(self, event_data, streamer):
         await streamer.broadcast("Orchestrator", "Human intervention received. Processing...", "success")
@@ -365,4 +372,23 @@ class EventOrchestrator:
             "applied_solution": solution, 
             "new_schedule": new_schedule,
             "emergency_emails_sent": emergency_logs
+        }
+
+
+    def get_event_details(self, thread_id):
+        """Fetches the final schedule, marketing, and emails for the dashboard."""
+        self.thread_config = {"configurable": {"thread_id": thread_id}}
+        
+        # Pull the frozen memory state directly from LangGraph's SQLite saver
+        state = self.graph.get_state(self.thread_config)
+        
+        if not state or not hasattr(state, 'values'):
+            return {"error": "Thread not found or event not finished."}
+            
+        return {
+            "thread_id": thread_id,
+            "schedule": state.values.get("schedule", []),
+            "marketing_copy": state.values.get("marketing_copy", ""),
+            "email_logs": state.values.get("email_logs", []),
+            "agent_outputs": state.values.get("agent_outputs", {})
         }

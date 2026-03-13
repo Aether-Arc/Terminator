@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createEvent, approvePlan, simulateCrisis, fetchHistory, forkEvent, fetchThreadState } from '../../lib/api'
 import AgentMonitor from '../../components/AgentMonitor'
+import MonteCarloChart from '../../components/MonteCarloChart'
 import { Play, CheckCircle, AlertTriangle, FastForward, Server, Mail, Calendar, Share2, MessageSquare, History, Send, Plus, Edit3 } from 'lucide-react'
 
 export default function AgentsPage() {
@@ -11,19 +12,20 @@ export default function AgentsPage() {
   const [logs, setLogs] = useState<any[]>([])
   const [eventData, setEventData] = useState<any>(null)
   const [crisisInput, setCrisisInput] = useState("");
-  
+
   // 🚀 Advanced State for History & Time Travel
   const [activeThread, setActiveThread] = useState<string | null>(null)
   const [historyThreads, setHistoryThreads] = useState<string[]>([])
   const [chatInput, setChatInput] = useState("")
-  
+  const [simMetrics, setSimMetrics] = useState<any>(null)
+
   // Results State
   const [schedule, setSchedule] = useState<any>(null) // Keeps raw object for reference
   const [scheduleStr, setScheduleStr] = useState<string>("") // 🚀 For the Editable Textarea
   const [marketing, setMarketing] = useState<string>("")
   const [emailLogs, setEmailLogs] = useState<any[]>([])
   const [score, setScore] = useState<number>(0)
-  
+
   const ws = useRef<WebSocket | null>(null)
   const hasFired = useRef(false);
 
@@ -35,7 +37,7 @@ export default function AgentsPage() {
 
     if (hasFired.current) return;
     hasFired.current = true;
-    
+
     // 2. Connect to Swarm Live Stream (WebSocket)
     ws.current = new WebSocket("ws://localhost:8000/ws/swarm")
     ws.current.onmessage = (event) => {
@@ -60,14 +62,14 @@ export default function AgentsPage() {
     setStatus("PLANNING")
     try {
       const result = await createEvent(payload)
-      
+
       setActiveThread(result.thread_id) // Save the dynamic thread ID
       setSchedule(result.schedule)
-      
+
       // 🚀 Load the schedule into the editable text area
       setScheduleStr(JSON.stringify(result.schedule, null, 2))
       if (result.stability_score) setScore(result.stability_score)
-      
+
       if (result.requires_approval) {
         setStatus("AWAITING_APPROVAL")
       } else {
@@ -86,16 +88,16 @@ export default function AgentsPage() {
   const loadPastThread = async (threadId: string) => {
     setActiveThread(threadId)
     setLogs([{ agent: "System", action: `Loaded SQLite memory for ${threadId}...`, status: "success" }])
-    
+
     try {
       const data = await fetchThreadState(threadId)
       setSchedule(data.schedule)
       setScheduleStr(JSON.stringify(data.schedule, null, 2))
       setMarketing(data.marketing)
-      setEmailLogs(data.email_logs)
+      setEmailLogs(data.email_logs || [])
       setStatus(data.status)
-    } catch (e) { 
-      console.error("Failed to load thread", e) 
+    } catch (e) {
+      console.error("Failed to load thread", e)
     }
   }
 
@@ -108,9 +110,9 @@ export default function AgentsPage() {
       // Pass the edited plan back to the backend
       const result = await approvePlan({ ...eventData, edited_plan: editedScheduleJson })
       setMarketing(result.marketing)
-      setEmailLogs(result.email_outreach_logs)
+      setEmailLogs(result.email_outreach_logs || [])
       setStatus("COMPLETED")
-      
+
       // 🧠 SAVE TO DASHBOARD LOCAL STORAGE
       const finalManifest = {
         event_name: eventData.name,
@@ -121,10 +123,10 @@ export default function AgentsPage() {
         agent_outputs: result.agent_outputs || {}
       }
       localStorage.setItem("swarmResult", JSON.stringify(finalManifest))
-      
+
     } catch (e) {
       alert("Invalid JSON format in schedule! Please fix the brackets/quotes before approving.")
-      setStatus("AWAITING_APPROVAL") 
+      setStatus("AWAITING_APPROVAL")
     }
   }
 
@@ -132,23 +134,23 @@ export default function AgentsPage() {
     if (!crisisInput) return;
     setStatus("CRISIS")
     try {
-      const result = await simulateCrisis({ 
+      const result = await simulateCrisis({
         description: crisisInput,
         event_name: eventData?.name,
         csv_content: eventData?.csv_content,
         expected_crowd: eventData?.expected_crowd,
       })
-      
+
       setSchedule(result.new_schedule)
       setScheduleStr(JSON.stringify(result.new_schedule, null, 2))
-      
-      let newEmails = emailLogs;
+
+      let newEmails = emailLogs || [];
       if (result.emergency_emails_sent) {
         newEmails = [...emailLogs, ...result.emergency_emails_sent]
         setEmailLogs(newEmails)
       }
       setStatus("COMPLETED")
-      
+
       // Update local storage
       const existingDataStr = localStorage.getItem("swarmResult")
       let manifest = existingDataStr ? JSON.parse(existingDataStr) : {}
@@ -157,7 +159,7 @@ export default function AgentsPage() {
       manifest.crisis_injected = result.crisis_injected
       manifest.applied_solution = result.applied_solution
       localStorage.setItem("swarmResult", JSON.stringify(manifest))
-      
+
     } catch (e) {
       console.error(e)
     }
@@ -167,27 +169,27 @@ export default function AgentsPage() {
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!chatInput || !activeThread) return;
-    
+
     setStatus("PLANNING")
     setChatInput("") // clear box
-    
+
     try {
       // Fork the state and rewind time in LangGraph!
       const result = await forkEvent({ thread_id: activeThread, new_prompt: chatInput })
-      
+
       setSchedule(result.schedule)
       setScheduleStr(JSON.stringify(result.schedule, null, 2))
       if (result.stability_score) setScore(result.stability_score)
-      
+
       setStatus("AWAITING_APPROVAL") // Wait for user to approve the newly generated plan
-    } catch (e) { 
-      console.error(e) 
+    } catch (e) {
+      console.error(e)
     }
   }
 
   return (
     <div className="h-screen flex bg-[#1e1e1e] text-vscode-text font-mono overflow-hidden relative">
-      
+
       {/* 🚀 LEFT SIDEBAR: ChatGPT Style History */}
       <div className="w-64 border-r border-vscode-border bg-[#181818] flex flex-col z-20">
         <div className="p-4 border-b border-vscode-border">
@@ -195,13 +197,13 @@ export default function AgentsPage() {
             <Plus size={14} /> New Event Swarm
           </button>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-2">
           <h3 className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 px-2 flex items-center gap-2">
-            <History size={10}/> Saved Threads
+            <History size={10} /> Saved Threads
           </h3>
           {historyThreads.map(thread => (
-            <button 
+            <button
               key={thread}
               onClick={() => loadPastThread(thread)}
               className={`w-full text-left px-3 py-2 text-xs rounded mb-1 flex items-center gap-2 truncate ${activeThread === thread ? 'bg-vscode-blue/20 text-vscode-blue' : 'hover:bg-[#2d2d2d] text-gray-400'}`}
@@ -215,7 +217,7 @@ export default function AgentsPage() {
       {/* RIGHT PANEL: Main Content */}
       <div className="flex-1 flex flex-col relative p-4">
         <div className="scanline"></div>
-        
+
         {/* HEADER */}
         <div className="flex justify-between items-center border-b border-vscode-border pb-4 mb-4 z-10">
           <div className="flex items-center gap-3">
@@ -227,7 +229,7 @@ export default function AgentsPage() {
               STATUS: {status}
             </span>
           </div>
-          
+
           {/* HUMAN IN THE LOOP CONTROLS */}
           <div className="flex gap-4">
             {status === "AWAITING_APPROVAL" && (
@@ -237,9 +239,9 @@ export default function AgentsPage() {
             )}
             {status === "COMPLETED" && (
               <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder="Type custom crisis here..." 
+                <input
+                  type="text"
+                  placeholder="Type custom crisis here..."
                   value={crisisInput}
                   onChange={(e) => setCrisisInput(e.target.value)}
                   className="bg-[#2d2d2d] border border-red-500/50 text-red-400 px-3 py-1 text-xs rounded outline-none focus:border-red-500 w-64"
@@ -257,7 +259,7 @@ export default function AgentsPage() {
 
         {/* MAIN DASHBOARD GRID */}
         <div className="flex-1 grid grid-cols-12 gap-4 overflow-hidden z-10 mb-4">
-          
+
           {/* LEFT PANEL: Live Agent Terminal */}
           <div className="col-span-4 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-xl overflow-hidden">
             <div className="bg-[#1e1e1e] border-b border-vscode-border p-2 text-xs flex gap-2">
@@ -269,17 +271,17 @@ export default function AgentsPage() {
 
           {/* RIGHT PANEL: Outputs */}
           <div className="col-span-8 grid grid-rows-2 gap-4 overflow-hidden">
-            
+
             {/* 🚀 EDITABLE SCHEDULE PANEL */}
             <div className="border border-vscode-border bg-[#252526] rounded overflow-hidden flex flex-col shadow-xl">
               <div className="bg-[#1e1e1e] border-b border-vscode-border p-2 text-xs flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <Calendar size={14} className="text-vscode-yellow" /> <span>schedule.json</span>
                 </div>
-                {status === "AWAITING_APPROVAL" && <span className="text-vscode-blue flex items-center gap-1"><Edit3 size={12}/> Editable</span>}
+                {status === "AWAITING_APPROVAL" && <span className="text-vscode-blue flex items-center gap-1"><Edit3 size={12} /> Editable</span>}
               </div>
-              
-              <textarea 
+
+              <textarea
                 value={scheduleStr}
                 onChange={(e) => setScheduleStr(e.target.value)}
                 disabled={status !== "AWAITING_APPROVAL"}
@@ -299,12 +301,23 @@ export default function AgentsPage() {
                 </div>
               </div>
 
+              {/* 🚀 NEW: MONTE CARLO VISUALIZATION PANEL */}
+              <div className="border border-vscode-border bg-[#252526] rounded overflow-hidden flex flex-col shadow-xl h-64 mt-4">
+                <div className="bg-[#1e1e1e] border-b border-vscode-border p-2 text-xs flex items-center gap-2">
+                  <Play size={14} className="text-vscode-blue" /> <span>physics_engine.viz</span>
+                </div>
+                <div className="flex-1">
+                  {/* Pass your simulation data here. For the hackathon demo, you can even mock this array if the real data is too complex to route! */}
+                  <MonteCarloChart metrics={simMetrics} />
+                </div>
+              </div>
+
               <div className="border border-vscode-border bg-[#252526] rounded overflow-hidden flex flex-col shadow-xl">
                 <div className="bg-[#1e1e1e] border-b border-vscode-border p-2 text-xs flex items-center gap-2">
                   <Mail size={14} className="text-vscode-green" /> <span>email_outreach.log</span>
                 </div>
                 <div className="p-4 overflow-y-auto text-xs">
-                  {emailLogs.length > 0 ? (
+                  {Array.isArray(emailLogs) && emailLogs.length > 0 ? (
                     emailLogs.map((log, i) => (
                       <div key={i} className="mb-2 border-b border-vscode-border pb-2">
                         <span className="text-vscode-blue">[{log.status || 'SENT'}]</span> To: <span className="text-vscode-orange">{log.email}</span>
@@ -325,11 +338,11 @@ export default function AgentsPage() {
         {/* 🚀 BOTTOM CHAT INPUT (Time Machine Controls) */}
         <div className="border border-vscode-border bg-[#181818] rounded-lg z-10 shadow-xl">
           <form onSubmit={handleChatSubmit} className="flex items-center gap-4 bg-[#252526] rounded-lg p-2 focus-within:border-vscode-blue transition-colors">
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              placeholder="e.g. 'Rewind and change the budget to $20k' or 'Add a 30 min coffee break...'" 
+              placeholder="e.g. 'Rewind and change the budget to $20k' or 'Add a 30 min coffee break...'"
               className="flex-1 bg-transparent border-none outline-none text-vscode-text text-sm px-2"
             />
             <button type="submit" disabled={status === "PLANNING"} className="bg-vscode-blue/20 text-vscode-blue p-2 rounded hover:bg-vscode-blue hover:text-white transition-all disabled:opacity-50">

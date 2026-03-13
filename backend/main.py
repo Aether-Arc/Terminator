@@ -169,9 +169,28 @@ async def get_thread_state(thread_id: str):
         return {
             "schedule": state.values.get("schedule", []),
             "marketing": state.values.get("marketing_copy", ""),
-            "email_logs": state.values.get("email_logs", []),
+            "email_logs": state.values.get("email_logs") or [],
             "requires_approval": is_waiting,
             "status": "AWAITING_APPROVAL" if is_waiting else "COMPLETED"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+
+# GET /api/history/{thread_id}
+@app.get("/api/history/{thread_id}")
+async def get_history(thread_id: str):
+    return orchestrator.get_event_details(thread_id)
+
+# POST /api/edit/prompt
+@app.post("/api/edit/prompt")
+async def edit_via_prompt(request: Request):
+    data = await request.json()
+    return await orchestrator.fork_and_update(data["thread_id"], data["prompt_text"], websocket_streamer)
+
+# POST /api/edit/manual
+@app.post("/api/edit/manual")
+async def edit_manual(request: Request):
+    data = await request.json()
+    return await orchestrator.manual_override(data, websocket_streamer)

@@ -64,7 +64,7 @@ def build_graph(planner, critic, scheduler, marketing, email, world_model, budge
         if state.get("critic_feedback"):
             event_data["critic_feedback"] = state["critic_feedback"]
             
-        plan_list = await planner.generate_multiple_plans(event_data, count=3)
+        plan_list = await planner.generate_multiple_plans(event_data, count=1)
         return {"candidates": plan_list, "iterations": state.get("iterations", 0) + 1,"audit_log": [f"Planner generated {len(plan_list)} candidate schedules."], "past_context": str(past_events)}
 
     async def run_world_model(state):

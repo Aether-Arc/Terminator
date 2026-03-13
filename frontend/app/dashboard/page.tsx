@@ -1,279 +1,243 @@
-"use client"
-import { useEffect, useState } from 'react';
-import { Calendar, Share2, Mail, BrainCircuit, Activity, AlertTriangle, ShieldCheck, Clock, Database, Users, DollarSign, Briefcase } from 'lucide-react';
+"use client";
 
-export default function Dashboard() {
-  const [results, setResults] = useState<any>(null);
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
-  useEffect(() => {
-    const saved = localStorage.getItem("swarmResult");
-    if (saved) {
-      setResults(JSON.parse(saved));
-    }
-  }, []);
-
-  if (!results) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center text-gray-500 font-mono bg-[#1e1e1e]">
-        <Database size={48} className="mb-4 text-vscode-border" />
-        <p>No active event data found in VectorDB.</p>
-        <p className="text-xs mt-2">Please initialize and approve a swarm deployment first.</p>
-      </div>
-    )
-  }
-
-  // Safely extract data
-  const schedule = results.schedule?.schedule || results.schedule || [];
-  const emails = results.email_outreach_logs || results.emergency_emails_sent || [];
-  const score = results.stability_score || 92.5;
-  const outputs = results.agent_outputs || {};
-
-  // 🧠 CUSTOM MARKDOWN PARSER FOR VS CODE THEME
-  const formatMarkdown = (text: string) => {
-    if (!text) return <span className="text-gray-500 italic">No data available.</span>;
-    
-    return text.split('\n').map((line, i) => {
-      if (line.startsWith('## ')) return <h2 key={i} className="text-vscode-blue font-bold text-lg mt-5 mb-2 border-b border-vscode-border/50 pb-1">{line.replace('## ', '')}</h2>;
-      if (line.startsWith('# ')) return <h1 key={i} className="text-vscode-purple font-bold text-xl mt-5 mb-3">{line.replace('# ', '')}</h1>;
-      
-      if (line.startsWith('* ') || line.startsWith('- ')) {
-        const parts = line.substring(2).split(/(\*\*.*?\*\*)/g);
-        return (
-          <li key={i} className="ml-5 list-disc mb-1 text-gray-300">
-            {parts.map((p, j) => p.startsWith('**') ? <strong key={j} className="text-vscode-orange font-semibold">{p.replace(/\*\*/g, '')}</strong> : p)}
-          </li>
-        );
-      }
-      
-      if (line.trim() !== '') {
-        const parts = line.split(/(\*\*.*?\*\*)/g);
-        return (
-          <p key={i} className="mb-3 text-gray-300">
-            {parts.map((p, j) => p.startsWith('**') ? <strong key={j} className="text-vscode-orange font-semibold">{p.replace(/\*\*/g, '')}</strong> : p)}
-          </p>
-        );
-      }
-      return <br key={i} />;
-    });
-  };
-
-  return (
-    <div className="h-full flex flex-col p-6 bg-[#1e1e1e] text-vscode-text font-mono overflow-y-auto relative">
-      <div className="scanline pointer-events-none"></div>
-
-      {/* HEADER: Event Manifest */}
-      <div className="flex justify-between items-end border-b border-vscode-border pb-4 mb-6">
-        <div>
-          <h1 className="text-2xl text-white font-bold tracking-widest uppercase flex items-center gap-3">
-            <ShieldCheck className="text-vscode-green" /> FINAL EVENT MANIFEST
-          </h1>
-          <p className="text-xs text-gray-400 mt-1">Generated autonomously by EventOS Multi-Agent Swarm</p>
-        </div>
-        <div className="text-right flex gap-8">
-          <div>
-            <div className="text-[10px] text-vscode-yellow uppercase tracking-widest">Attendance Forecast (ML)</div>
-            <div className="text-3xl text-vscode-blue font-bold">{outputs.attendance_forecast || "N/A"}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-vscode-yellow uppercase tracking-widest">System Confidence Score</div>
-            <div className="text-3xl text-vscode-green font-bold">{score.toFixed(1)}%</div>
-          </div>
-        </div>
-      </div>
-
-      {/* TOP ROW: Quick Metrics */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <MetricCard icon={<Calendar />} title="Total Sessions" value={Array.isArray(schedule) ? schedule.length : "N/A"} color="text-vscode-blue" />
-        <MetricCard icon={<Mail />} title="Emails Processed" value={emails.length} color="text-vscode-orange" />
-        <MetricCard icon={<Activity />} title="Crises Handled" value={results.crisis_injected ? 1 : 0} color="text-red-400" />
-        <MetricCard icon={<BrainCircuit />} title="RL Policy Updates" value="+1 (Optimized)" color="text-vscode-purple" />
-      </div>
-
-      {/* NEW ROW: Modular Agent Outputs */}
-      <div className="grid grid-cols-3 gap-6 mb-6">
-        {/* BUDGET AGENT */}
-        <div className="bg-[#252526] border border-vscode-border rounded p-4 shadow-lg flex flex-col max-h-64 overflow-y-auto">
-          <h3 className="text-vscode-green text-xs font-bold uppercase flex items-center gap-2 mb-3"><DollarSign size={14}/> Financial Analysis</h3>
-          {outputs.budget ? (
-            <div>
-              <div className="text-2xl text-white font-bold mb-1">${outputs.budget.total_projected_cost?.toLocaleString()}</div>
-              <div className="text-[10px] text-gray-400 mb-3">Status: <span className="text-vscode-green">{outputs.budget.status}</span></div>
-              <div className="text-xs text-gray-300 space-y-1">
-                {outputs.budget.line_items?.map((item:any, i:number) => (
-                  <div key={i} className="flex justify-between border-b border-vscode-border/50 pb-1 pt-1">
-                    <span>{item.category}</span>
-                    <span className="text-vscode-orange">${item.cost}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : <span className="text-xs text-gray-600">Budget Agent not queued.</span>}
-        </div>
-
-        {/* VOLUNTEER AGENT */}
-        <div className="bg-[#252526] border border-vscode-border rounded p-4 shadow-lg flex flex-col max-h-64 overflow-y-auto">
-          <h3 className="text-vscode-blue text-xs font-bold uppercase flex items-center gap-2 mb-3"><Users size={14}/> Logistics & Staffing</h3>
-          {outputs.volunteer ? (
-            <div>
-              <div className="text-2xl text-white font-bold mb-1">{outputs.volunteer.total_volunteers_required} <span className="text-sm text-gray-400 font-normal">staff req.</span></div>
-              <div className="text-xs text-gray-300 space-y-2 mt-3">
-                {outputs.volunteer.roles?.map((role:any, i:number) => (
-                  <div key={i} className="p-2 bg-[#1e1e1e] rounded border border-vscode-border">
-                    <div className="font-bold text-vscode-blue">{role.role_name} ({role.headcount} ppl)</div>
-                    <div className="text-[10px] text-gray-400">{role.active_time}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : <span className="text-xs text-gray-600">Volunteer Agent not queued.</span>}
-        </div>
-
-        {/* SPONSOR AGENT */}
-        <div className="bg-[#252526] border border-vscode-border rounded p-4 shadow-lg flex flex-col max-h-64 overflow-y-auto">
-          <h3 className="text-vscode-purple text-xs font-bold uppercase flex items-center gap-2 mb-3"><Briefcase size={14}/> Corporate Outreach</h3>
-          {outputs.sponsor ? (
-            <div className="text-xs">
-              <div className="font-bold text-gray-400 mb-2 border-b border-vscode-border/50 pb-1">Target Tiers:</div>
-              {outputs.sponsor.tiers?.map((tier:any, i:number) => (
-                <div key={i} className="mb-1"><span className="text-vscode-orange">{tier.name}</span>: {tier.price}</div>
-              ))}
-              <div className="font-bold text-gray-400 mt-4 mb-2 border-b border-vscode-border/50 pb-1">Live Web-Searched Targets:</div>
-              {outputs.sponsor.target_sponsors?.map((s:any, i:number) => (
-                <div key={i} className="mb-2 p-2 bg-[#1e1e1e] border-l-2 border-vscode-purple">
-                  <div className="font-bold text-white">{s.company}</div>
-                  <div className="text-[10px] text-gray-400 mt-1 italic">"{s.pitch}"</div>
-                </div>
-              ))}
-            </div>
-          ) : <span className="text-xs text-gray-600">Sponsor Agent not queued.</span>}
-        </div>
-      </div>
-
-      {/* MIDDLE ROW: Schedule & Marketing */}
-      <div className="grid grid-cols-12 gap-6 mb-6">
-        
-        {/* LEFT: Master Schedule (OR-Tools Output) */}
-        <div className="col-span-6 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-lg">
-          <div className="bg-[#1e1e1e] border-b border-vscode-border p-3 text-xs flex items-center gap-2 uppercase tracking-wider font-bold">
-            <Calendar size={14} className="text-vscode-blue" /> <span>Mathematical Schedule (OR-Tools)</span>
-          </div>
-          <div className="p-4 overflow-y-auto h-96 space-y-3">
-            {Array.isArray(schedule) && schedule.length > 0 ? (
-              schedule.map((item: any, i: number) => (
-                <div key={i} className="flex gap-4 p-3 bg-[#1e1e1e] border border-vscode-border rounded hover:border-vscode-blue transition-colors">
-                  <div className="flex flex-col items-center justify-center border-r border-vscode-border pr-4 min-w-[100px]">
-                    <Clock size={14} className="text-gray-500 mb-1" />
-                    <span className="text-vscode-orange text-xs font-bold">{item.start || item.time || "TBD"}</span>
-                  </div>
-                  <div className="flex flex-col justify-center">
-                    <span className="text-vscode-text font-bold text-sm">{item.session || item.name || "Session"}</span>
-                    {item.track && <span className="text-gray-500 text-[10px] mt-1 uppercase">Track: {item.track}</span>}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-gray-500 italic text-xs">Schedule data parsing error. Raw output: {JSON.stringify(schedule)}</div>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT: Marketing Assets (Gemini/ML) */}
-        <div className="col-span-6 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-lg">
-          <div className="bg-[#1e1e1e] border-b border-vscode-border p-3 text-xs flex items-center gap-2 uppercase tracking-wider font-bold">
-            <Share2 size={14} className="text-vscode-purple" /> <span>Social Assets & ML Timing</span>
-          </div>
-          <div className="p-6 overflow-y-auto h-96 text-sm font-sans bg-[#1e1e1e] leading-relaxed">
-            {formatMarkdown(results.marketing)}
-          </div>
-        </div>
-
-      </div>
-
-      {/* BOTTOM ROW: Email Logs & Crisis/Memory Insights */}
-      <div className="grid grid-cols-12 gap-6">
-        
-        {/* LEFT: Email Outreach Logistics */}
-        <div className="col-span-6 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-lg">
-          <div className="bg-[#1e1e1e] border-b border-vscode-border p-3 text-xs flex items-center justify-between uppercase tracking-wider font-bold">
-            <div className="flex items-center gap-2">
-              <Mail size={14} className="text-vscode-orange" /> <span>Email Target Acquisition</span>
-            </div>
-            <span className="text-[10px] bg-vscode-orange/20 text-vscode-orange px-2 py-0.5 rounded border border-vscode-orange">CSV Parsed</span>
-          </div>
-          <div className="p-0 overflow-y-auto h-64">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-[#1e1e1e] border-b border-vscode-border sticky top-0">
-                <tr>
-                  <th className="p-3 text-gray-500 font-normal">Status</th>
-                  <th className="p-3 text-gray-500 font-normal">Target Email</th>
-                  <th className="p-3 text-gray-500 font-normal">Preview Snippet</th>
-                </tr>
-              </thead>
-              <tbody>
-                {emails.map((log: any, i: number) => (
-                  <tr key={i} className="border-b border-vscode-border/50 hover:bg-[#2a2d2e]">
-                    <td className="p-3">
-                      <span className={`px-2 py-1 rounded text-[9px] uppercase border ${log.status === 'Drafted' ? 'border-vscode-blue text-vscode-blue bg-vscode-blue/10' : 'border-vscode-yellow text-vscode-yellow bg-vscode-yellow/10'}`}>
-                        {log.status}
-                      </span>
-                    </td>
-                    <td className="p-3 text-vscode-text font-bold">{log.email}</td>
-                    <td className="p-3 text-gray-400 truncate max-w-[200px]">{log.preview}</td>
-                  </tr>
-                ))}
-                {emails.length === 0 && (
-                  <tr><td colSpan={3} className="p-4 text-center text-gray-500 italic">No email logs found.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* RIGHT: Reinforcement & Vector Memory Logs */}
-        <div className="col-span-6 flex flex-col border border-vscode-border bg-[#252526] rounded shadow-lg">
-          <div className="bg-[#1e1e1e] border-b border-vscode-border p-3 text-xs flex items-center gap-2 uppercase tracking-wider font-bold">
-            <BrainCircuit size={14} className="text-vscode-green" /> <span>VectorDB & Cognitive Logs</span>
-          </div>
-          <div className="p-4 overflow-y-auto h-64 space-y-4 text-xs">
-            
-            <div className="border-l-2 border-vscode-blue pl-3">
-              <div className="text-vscode-blue font-bold mb-1">Knowledge Stored</div>
-              <div className="text-gray-400">Event schedule and marketing assets successfully embedded into TF-IDF Vector Space for future reference.</div>
-            </div>
-
-            <div className="border-l-2 border-vscode-purple pl-3">
-              <div className="text-vscode-purple font-bold mb-1">RL Policy Evaluation</div>
-              <div className="text-gray-400">Critic Agent evaluated plan logic. Q-Table updated with reward value <span className="text-vscode-green font-bold">+{score.toFixed(1)}</span> for current state parameters.</div>
-            </div>
-
-            {results.crisis_injected && (
-              <div className="border-l-2 border-red-500 pl-3">
-                <div className="text-red-400 font-bold mb-1">Crisis Anomaly Resolved</div>
-                <div className="text-gray-400">
-                  <span className="text-vscode-text block mb-1">Trigger: "{results.crisis_injected}"</span>
-                  <span className="text-vscode-green">Mitigation: {results.applied_solution?.mitigation_strategy || "Dynamic Rescheduling Applied."}</span>
-                </div>
-              </div>
-            )}
-
-          </div>
-        </div>
-
-      </div>
-    </div>
-  )
+// Define TypeScript interfaces based on your backend output
+interface ScheduleItem {
+  time: string;
+  session: string;
+  [key: string]: any;
 }
 
-function MetricCard({ icon, title, value, color }: { icon: any, title: string, value: string | number, color: string }) {
+interface EventData {
+  thread_id: string;
+  schedule: ScheduleItem[];
+  marketing_copy: string;
+  email_logs: any[];
+  agent_outputs?: any;
+}
+
+export default function DashboardPage() {
+  const searchParams = useSearchParams();
+  const threadId = searchParams.get("threadId") || "event_thread_1"; // Default for testing
+
+  // State Management
+  const [eventData, setEventData] = useState<EventData | null>(null);
+  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [aiInstruction, setAiInstruction] = useState("");
+  
+  // UI States
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isSavingManual, setIsSavingManual] = useState(false);
+
+  // 1. FETCH EVENT DETAILS ON PAGE LOAD
+  useEffect(() => {
+    const fetchEventData = async () => {
+      setIsLoading(true);
+      try {
+        // Replace with your actual FastAPI backend URL
+        const response = await fetch(`http://localhost:8000/api/history/${threadId}`);
+        const data = await response.json();
+        
+        if (!data.error) {
+          setEventData(data);
+          setSchedule(data.schedule || []);
+        } else {
+          console.error("Failed to load thread:", data.error);
+        }
+      } catch (error) {
+        console.error("Error fetching event data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (threadId) {
+      fetchEventData();
+    }
+  }, [threadId]);
+
+  // 2. HANDLE AI INSTRUCTION SUBMIT (Routes to Planner)
+  const handleAiInstructionSubmit = async () => {
+    if (!aiInstruction.trim()) return;
+    setIsAiLoading(true);
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/edit/prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          thread_id: threadId,
+          prompt_text: aiInstruction
+        })
+      });
+      
+      const result = await response.json();
+      // If the AI rewrites the schedule, update the UI
+      if (result.schedule) {
+        setSchedule(result.schedule);
+        alert("AI successfully replanned the event!");
+      }
+      setAiInstruction(""); // Clear input
+    } catch (error) {
+      console.error("AI Re-plan error:", error);
+      alert("Failed to send AI instruction.");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  // 3. HANDLE MANUAL SCHEDULE EDITS (Updates UI state locally)
+  const handleScheduleChange = (index: number, field: keyof ScheduleItem, value: string) => {
+    const updatedSchedule = [...schedule];
+    updatedSchedule[index] = { ...updatedSchedule[index], [field]: value };
+    setSchedule(updatedSchedule);
+  };
+
+  // 4. SAVE MANUAL EDITS (Bypasses LLM, instant update)
+  const handleManualSave = async () => {
+    setIsSavingManual(true);
+    try {
+      const response = await fetch(`http://localhost:8000/api/edit/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          override_type: "edit_schedule",
+          new_schedule: schedule,
+          csv_content: "" // Pass your CSV content if needed for emails
+        })
+      });
+      
+      const result = await response.json();
+      alert("Manual schedule edits saved and participants notified!");
+    } catch (error) {
+      console.error("Manual save error:", error);
+      alert("Failed to save manual edits.");
+    } finally {
+      setIsSavingManual(false);
+    }
+  };
+
+  if (isLoading) {
+    return <div className="p-10 text-center text-xl">Loading Event Dashboard...</div>;
+  }
+
   return (
-    <div className="bg-[#252526] border border-vscode-border rounded p-4 flex items-center gap-4 shadow-lg">
-      <div className={`p-3 rounded bg-[#1e1e1e] border border-vscode-border ${color}`}>
-        {icon}
-      </div>
-      <div>
-        <div className="text-gray-500 text-[10px] uppercase tracking-wider mb-1">{title}</div>
-        <div className={`text-xl font-bold ${color}`}>{value}</div>
+    <div className="max-w-6xl mx-auto p-6 space-y-8">
+      <header className="border-b pb-4">
+        <h1 className="text-3xl font-bold text-gray-800">Event Dashboard</h1>
+        <p className="text-gray-500">Thread ID: {threadId}</p>
+      </header>
+
+      {/* --- AI INSTRUCTION SECTION --- */}
+      <section className="bg-blue-50 p-6 rounded-lg border border-blue-100 shadow-sm">
+        <h2 className="text-xl font-semibold text-blue-800 mb-2">Ask AI to Re-plan</h2>
+        <p className="text-sm text-blue-600 mb-4">
+          Need a major change? Tell the Swarm to rebuild the schedule automatically.
+        </p>
+        <div className="flex gap-4">
+          <input
+            type="text"
+            className="flex-1 p-3 border rounded-md shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-400"
+            placeholder="e.g., 'Make room for a 30 minute lunch break at 1 PM'"
+            value={aiInstruction}
+            onChange={(e) => setAiInstruction(e.target.value)}
+            disabled={isAiLoading}
+          />
+          <button
+            onClick={handleAiInstructionSubmit}
+            disabled={isAiLoading || !aiInstruction.trim()}
+            className="bg-blue-600 text-white px-6 py-3 rounded-md font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {isAiLoading ? "AI is Replanning..." : "Add AI Instruction"}
+          </button>
+        </div>
+      </section>
+
+      {/* --- MANUAL SCHEDULE EDITOR SECTION --- */}
+      <section className="bg-white p-6 rounded-lg border shadow-sm">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-800">Event Schedule</h2>
+            <p className="text-sm text-gray-500">Edit table directly to fix typos or minor timing issues.</p>
+          </div>
+          <button
+            onClick={handleManualSave}
+            disabled={isSavingManual}
+            className="bg-green-600 text-white px-5 py-2 rounded-md font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
+          >
+            {isSavingManual ? "Saving..." : "Save Manual Edits"}
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-100 text-gray-700">
+                <th className="p-3 border-b w-1/4">Time</th>
+                <th className="p-3 border-b w-3/4">Session</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedule.map((item, index) => (
+                <tr key={index} className="hover:bg-gray-50">
+                  <td className="p-2 border-b">
+                    <input
+                      type="text"
+                      className="w-full p-2 border rounded border-transparent hover:border-gray-300 focus:border-blue-500 focus:bg-white bg-transparent outline-none"
+                      value={item.time}
+                      onChange={(e) => handleScheduleChange(index, "time", e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2 border-b">
+                    <input
+                      type="text"
+                      className="w-full p-2 border rounded border-transparent hover:border-gray-300 focus:border-blue-500 focus:bg-white bg-transparent outline-none"
+                      value={item.session}
+                      onChange={(e) => handleScheduleChange(index, "session", e.target.value)}
+                    />
+                  </td>
+                </tr>
+              ))}
+              {schedule.length === 0 && (
+                <tr>
+                  <td colSpan={2} className="p-4 text-center text-gray-500">No schedule generated yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* --- MARKETING & EMAILS SECTION --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <section className="bg-white p-6 rounded-lg border shadow-sm">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Marketing Assets</h2>
+          <div className="bg-gray-50 p-4 rounded-md h-64 overflow-y-auto whitespace-pre-wrap text-sm border">
+            {eventData?.marketing_copy || "No marketing copy available."}
+          </div>
+        </section>
+
+        <section className="bg-white p-6 rounded-lg border shadow-sm">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Email Logs</h2>
+          <div className="bg-gray-50 p-4 rounded-md h-64 overflow-y-auto text-sm border">
+            {eventData?.email_logs && eventData.email_logs.length > 0 ? (
+              <ul className="space-y-2">
+                {eventData.email_logs.map((log, idx) => (
+                  <li key={idx} className="border-b pb-2 last:border-0 text-gray-700">
+                    <span className="font-semibold text-gray-900">To:</span> {log.recipient || "Participants"} <br />
+                    <span className="font-semibold text-gray-900">Status:</span> {log.status || "Sent"}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <span className="text-gray-500">No email logs available.</span>
+            )}
+          </div>
+        </section>
       </div>
     </div>
-  )
+  );
 }

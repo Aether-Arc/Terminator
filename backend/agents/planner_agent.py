@@ -45,36 +45,45 @@ class PlannerAgent:
         history = event_data.get("historical_context", "No past data.")
         rl_strategy = event_data.get("learned_strategy", "Prioritize balanced scheduling.")
         
+        # FIX 1: Extract the new constraints we injected from the orchestrator
+        user_constraints = event_data.get("user_constraints", "None")
+        
         tasks = []
         for i in range(count):
-            # We explicitly instruct the AI to use its tools in the prompt
             prompt = f"""
-            You are an elite event architect planning '{event_name}' for {crowd} people.
+            You are an elite, highly adaptable event architect planning '{event_name}' for {crowd} people.
             
-            YOUR MANDATORY DIRECTIVES BEFORE PLANNING:
-            1. Use the 'web_search' tool to look up "Current trending topics in technology and AI 2026" and integrate one trend into a session.
-            2. Use the 'check_calendar' tool for tomorrow's date to ensure we don't schedule a keynote when the speaker is busy.
+            🔥 CRITICAL USER CONSTRAINTS (OBEY STRICTLY):
+            {user_constraints}
             
-            🧠 SWARM INTELLIGENCE:
+            🧠 SWARM INTELLIGENCE & PAST MEMORY:
             - Past memory: {history}
             - RL Policy Suggestion: {rl_strategy}
             
-            Design a UNIQUE variation (Option {i+1}) of an event plan based on your web research and tool data.
-            Break the event down into exactly 5 logical sessions.
+            Design a highly realistic schedule that PERFECTLY adapts to the user's specific constraints.
             
-            Respond ONLY in valid JSON format:
+            DYNAMIC SCHEDULING RULES & FALLBACK PROTOCOLS:
+            1. DURATION: Analyze the constraints to determine the exact length of the event. 
+               -> ⚠️ FALLBACK: If the user constraints are vague or DO NOT mention a specific time/duration, you MUST use your own judgment based on the event name. 
+               (e.g., Default to a standard 1-day, 6-hour schedule for generic events. Default to 24-48 hours for a 'hackathon'. Default to 2 hours for a 'keynote').
+            2. BREAKS: Add logical human breaks (lunch, sleep, networking) ONLY IF they make sense for the duration. (e.g., A 2-hour event does not need a lunch break. A full-day event MUST have a lunch break).
+            3. FLEXIBILITY: Generate as many (or as few) sessions as necessary to fulfill the prompt. Ensure the start_time and end_time flow logically and sequentially.
+            
+            Respond ONLY in valid JSON format exactly like this structure:
             {{
-                "plan_overview": "String describing the vibe and mentioning the web research you did",
+                "plan_overview": "Explain your logic. If the prompt was vague, state the default assumptions you made regarding duration and structure.",
                 "sessions": [
-                    {{"name": "Opening Ceremony", "duration_hours": 1, "requires_main_stage": true}}
+                    {{"name": "Opening Brief", "day": 1, "start_time": "09:00 AM", "end_time": "09:30 AM", "requires_main_stage": true}},
+                    {{"name": "Core Activity", "day": 1, "start_time": "09:30 AM", "end_time": "02:00 PM", "requires_main_stage": false}}
                 ]
             }}
+            
             """
             tasks.append(self._generate_single_branch(prompt, i))
             
-        print(f"[*] Waking up ReAct Agent. Firing {count} sequential planning branches to respect cloud limits...")
-        plans = []
-        for task in tasks:
-            plans.append(await task)
+        print(f"[*] Waking up ReAct Agent. Firing {count} parallel planning branches...")
+        
+        # FIX 2: Run all branches concurrently instead of sequentially for better speed
+        plans = await asyncio.gather(*tasks)
         
         return list(plans)
