@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-// Define our specific LangGraph nodes
+// 🚀 FIXED: Capitalized IDs to match the WebSocket mapping exactly
 const PIPELINE_NODES = [
-  { id: "planner", label: "Event Planner" },
-  { id: "scheduler", label: "Scheduler" },
-  { id: "human_review", label: "Human Approval" },
-  { id: "execution_phase", label: "Map-Reduce Execution", isParallel: true },
+  { id: "Planner", label: "Event Planner" },
+  { id: "Scheduler", label: "Scheduler" },
+  { id: "Human_review", label: "Human Approval" },
+  { id: "Execution_phase", label: "Map-Reduce Execution", isParallel: true },
 ];
 
 export type NodeStatus = "waiting" | "running" | "completed";
@@ -19,19 +19,20 @@ export default function PipelineTracker({ nodeStatuses, activeLogs }: PipelineTr
   return (
     <div className="space-y-6">
       {/* 1. PIPELINE PROGRESS BAR */}
-      <div className="flex items-center justify-between bg-black/20 p-4 rounded-2xl border border-white/10 backdrop-blur-md">
+      <div className="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-200">
         {PIPELINE_NODES.map((node, index) => {
           const status = nodeStatuses[node.id] || "waiting";
           
+          // 🚀 MATCHED TO LIGHT THEME
           const colors = {
-            waiting: "bg-slate-800 text-slate-500 border-slate-700",
-            running: "bg-blue-500/20 text-blue-400 border-blue-500/50 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]",
-            completed: "bg-emerald-500/20 text-emerald-400 border-emerald-500/50",
+            waiting: "bg-white text-slate-400 border-slate-200",
+            running: "bg-indigo-50 text-indigo-600 border-indigo-200 animate-pulse shadow-sm",
+            completed: "bg-emerald-50 text-emerald-600 border-emerald-200",
           };
 
           return (
             <React.Fragment key={node.id}>
-              <div className={`flex flex-col items-center gap-2`}>
+              <div className={`flex flex-col items-center gap-2 z-10`}>
                 <div className={`px-4 py-2 rounded-full text-xs font-bold border transition-all duration-500 ${colors[status]}`}>
                   {node.label}
                 </div>
@@ -39,7 +40,7 @@ export default function PipelineTracker({ nodeStatuses, activeLogs }: PipelineTr
               {/* Connector Line */}
               {index < PIPELINE_NODES.length - 1 && (
                 <div className={`flex-1 h-1 mx-2 rounded-full transition-all duration-500 ${
-                  status === "completed" ? "bg-emerald-500/50" : "bg-slate-800"
+                  status === "completed" ? "bg-emerald-200" : "bg-slate-200"
                 }`} />
               )}
             </React.Fragment>
@@ -55,26 +56,26 @@ export default function PipelineTracker({ nodeStatuses, activeLogs }: PipelineTr
           if (status === "waiting") return null;
 
           return (
-            <div key={node.id} className="bg-white/5 border border-white/10 rounded-xl overflow-hidden backdrop-blur-md transition-all">
-              <div className="flex justify-between items-center p-4 bg-black/20">
+            <div key={node.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm transition-all">
+              <div className="flex justify-between items-center p-3 px-4 bg-slate-50 border-b border-slate-100">
                 <div className="flex items-center gap-3">
-                  <h3 className="font-semibold text-slate-200">{node.label}</h3>
+                  <h3 className="font-semibold text-slate-700 text-sm">{node.label}</h3>
                   {status === "running" && (
-                    <span className="flex items-center gap-2 px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded-md">
-                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-ping"></div>
+                    <span className="flex items-center gap-2 px-2.5 py-1 bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider rounded-md">
+                      <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-ping"></div>
                       Executing
                     </span>
                   )}
                   {status === "completed" && (
-                    <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-md">Done</span>
+                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider rounded-md">Done</span>
                   )}
                 </div>
               </div>
               
               {/* Streaming Content Body */}
-              <div className="p-4 border-t border-white/5 text-sm text-slate-400 font-mono whitespace-pre-wrap">
+              <div className="p-4 text-xs text-slate-500 font-mono whitespace-pre-wrap leading-relaxed">
                 {activeLogs[node.id] || (status === "running" ? "Initializing agent logic..." : "Task successfully completed.")}
-                {status === "running" && <span className="inline-block w-2 h-4 ml-1 bg-blue-400 animate-pulse"></span>}
+                {status === "running" && <span className="inline-block w-1.5 h-3 ml-1 bg-indigo-400 animate-pulse"></span>}
               </div>
             </div>
           );

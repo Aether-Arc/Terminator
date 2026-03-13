@@ -1,8 +1,7 @@
 "use client"
 import { useState, useEffect } from 'react'
-import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Terminal, Sparkles, LayoutTemplate } from 'lucide-react'
+import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Sparkles, LayoutTemplate } from 'lucide-react'
 import Link from 'next/link'
-// 🚀 Notice we import fetchThreadState now, and added an extra '../' because we are inside [id] folder
 import { fetchHistory, fetchThreadState } from '../../../lib/api'
 
 export default function Dashboard({ params }: { params: { id: string } }) {
@@ -18,13 +17,12 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
   // Workspace State
   const [schedule, setSchedule] = useState<any[]>([])
-  const [outputs, setOutputs] = useState<any>({ marketing: [], emails: [], operations: [] })
+  const [outputs, setOutputs] = useState<any>({ marketing: [], comms: [], operations: [] }) // 🚀 FIXED: using "comms"
   const [status, setStatus] = useState("AWAITING_APPROVAL")
   const [isEditing, setIsEditing] = useState(false)
 
-  // 🚀 Load history AND the specific thread data on mount
+  // Load history and thread data on mount
   useEffect(() => {
-    // 1. Fetch History for the Sidebar
     fetchHistory()
       .then(res => {
         if (res && res.threads) {
@@ -32,7 +30,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
              id: t, 
              title: `Thread (${t.substring(0, 8)})`
           }));
-          
           setThreads([
             { id: params.id, title: "Current Active Plan" }, 
             ...historyList.filter((t: any) => t.id !== params.id)
@@ -41,18 +38,19 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       })
       .catch(err => console.error("Could not fetch history", err));
 
-    // 2. 🚀 Fetch the actual data for THIS specific thread ID so the screen isn't blank
     if (params.id) {
       fetchThreadState(params.id)
         .then(data => {
           if (data.schedule) setSchedule(data.schedule);
-          if (data.agent_outputs) setOutputs(data.agent_outputs);
           
-          // Fallbacks just in case it's an older thread format
-          if (!data.agent_outputs && data.marketing_copy) {
-             setOutputs({ marketing: [{ task: "Saved Marketing", output: data.marketing_copy }], emails: [], operations: [] })
+          // 🚀 FIXED: Gracefully load comms and marketing
+          if (data.agent_outputs) {
+             setOutputs({
+                 marketing: data.agent_outputs.marketing || [],
+                 comms: data.agent_outputs.comms || data.agent_outputs.emails || [],
+                 operations: data.agent_outputs.operations || []
+             });
           }
-          
           if (data.status) setStatus(data.status);
         })
         .catch(err => console.error("Could not load thread data", err));
@@ -71,24 +69,33 @@ export default function Dashboard({ params }: { params: { id: string } }) {
     setStatus("PROCESSING_UPDATE");
 
     try {
-      const res = await fetch('/api/chat', {
+      // 🚀 FIXED: Sends "prompt_text" which the Intent Router expects
+      const res = await fetch('http://localhost:8000/api/chat', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           thread_id: params.id, 
-          payload: { action: "prompt", message: userMessage } 
+          prompt_text: userMessage 
         })
       });
       const data = await res.json();
       
       if (data.schedule) setSchedule(data.schedule);
-      if (data.agent_outputs) setOutputs(data.agent_outputs);
       
-      setMessages(prev => [...prev, { role: 'ai', content: data.reply || "I've updated the workspace based on your request. Please review the changes on the right." }]);
+      if (data.marketing || data.comms) {
+          setOutputs(prev => ({
+              ...prev,
+              marketing: data.marketing || prev.marketing,
+              comms: data.comms || prev.comms
+          }));
+      }
+      
+      setMessages(prev => [...prev, { role: 'ai', content: data.status === "dispatched" ? "Communications dispatched successfully!" : "I've updated the workspace based on your request. Please review the changes on the right." }]);
+      setStatus(data.status === "dispatched" ? "COMPLETED" : "AWAITING_APPROVAL");
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', content: "Sorry, there was an error updating the event." }]);
+      setStatus("AWAITING_APPROVAL");
     }
-    
-    setStatus("AWAITING_APPROVAL");
   }
 
   // Saves manual UI edits
@@ -97,15 +104,20 @@ export default function Dashboard({ params }: { params: { id: string } }) {
     setStatus("SAVING_EDITS");
     setMessages(prev => [...prev, { role: 'user', content: "*(Saved manual edits to workspace)*" }]);
 
-    await fetch('/api/chat', {
-      method: 'POST',
-      body: JSON.stringify({ 
-        thread_id: params.id, 
-        payload: { action: "direct_edit", schedule, agent_outputs: outputs } 
-      })
-    });
-    
-    setMessages(prev => [...prev, { role: 'ai', content: "Manual edits successfully saved to memory." }]);
+    try {
+      // 🚀 FIXED: Hits the proper manual edit endpoint
+      await fetch('http://localhost:8000/api/edit/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          thread_id: params.id, 
+          schedule: schedule 
+        })
+      });
+      setMessages(prev => [...prev, { role: 'ai', content: "Manual edits successfully saved to memory." }]);
+    } catch (e) {
+      console.error(e);
+    }
     setStatus("AWAITING_APPROVAL");
   }
 
@@ -113,16 +125,30 @@ export default function Dashboard({ params }: { params: { id: string } }) {
     setStatus("FINALIZING");
     setMessages(prev => [...prev, { role: 'user', content: "Approve all assets." }]);
 
-    await fetch('/api/chat', {
-      method: 'POST',
-      body: JSON.stringify({ thread_id: params.id, payload: { action: "approve" } })
-    });
-    
-    setMessages(prev => [...prev, { role: 'ai', content: "Event approved! All assets are finalized and ready for deployment." }]);
-    setStatus("COMPLETED");
+    try {
+      const res = await fetch('http://localhost:8000/api/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thread_id: params.id })
+      });
+      const data = await res.json();
+      
+      if (data.marketing || data.email_outreach_logs) {
+          setOutputs(prev => ({
+              ...prev,
+              marketing: data.marketing || prev.marketing,
+              comms: data.email_outreach_logs || prev.comms
+          }));
+      }
+
+      setMessages(prev => [...prev, { role: 'ai', content: "Event approved! All assets are finalized and ready for deployment." }]);
+      setStatus("COMPLETED");
+    } catch (e) {
+      console.error(e);
+      setStatus("AWAITING_APPROVAL");
+    }
   }
 
-  // Helper for status badge styles
   const getStatusStyles = (currentStatus: string) => {
     switch(currentStatus) {
       case 'COMPLETED': return 'bg-emerald-100 text-emerald-700 border-emerald-200'
@@ -139,7 +165,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       {/* COLUMN 1: Sidebar (History) */}
       <div className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 bg-white border-r border-slate-200 flex flex-col overflow-hidden shadow-sm z-20`}>
         <div className="p-4 border-b border-slate-100">
-          <Link href="/dashboard/new" className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100 text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 font-semibold transition-all">
+          <Link href="/" className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100 text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 font-semibold transition-all">
             <Plus size={16} /> New Event
           </Link>
         </div>
@@ -204,7 +230,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
             <input 
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              placeholder="e.g., Delay the event by 2 hours..."
+              placeholder="e.g., Send the emails or Delay event by 2 hours..."
               className="flex-1 bg-transparent px-3 outline-none text-sm text-slate-800 placeholder:text-slate-400"
               disabled={status === "PROCESSING_UPDATE" || isEditing}
             />
@@ -236,7 +262,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                 <Edit2 size={16} /> Edit manually
               </button>
             )}
-            {status !== "COMPLETED" && (
+            {status === "AWAITING_APPROVAL" && (
               <button onClick={handleApprove} className="bg-emerald-500 text-white px-5 py-2 text-sm rounded-xl font-semibold flex items-center gap-2 hover:bg-emerald-600 transition-all shadow-md shadow-emerald-500/20">
                 <CheckCircle size={16} /> Approve Plan
               </button>
@@ -255,8 +281,8 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                 <div key={i} className="mb-2 p-3.5 bg-slate-50 rounded-xl border-l-4 border-indigo-500 flex flex-col gap-1.5">
                   {isEditing ? (
                     <div className="flex gap-3">
-                      <input className="bg-white text-indigo-600 text-xs font-mono p-2 rounded-lg w-28 border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none shadow-sm" value={item.time} onChange={e => { const newSched = [...schedule]; newSched[i].time = e.target.value; setSchedule(newSched); }} />
-                      <input className="bg-white text-slate-700 text-sm flex-1 p-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none shadow-sm font-medium" value={item.session} onChange={e => { const newSched = [...schedule]; newSched[i].session = e.target.value; setSchedule(newSched); }} />
+                      <input className="bg-white text-indigo-600 text-xs font-mono p-2 rounded-lg w-28 border border-slate-200 outline-none shadow-sm" value={item.time} onChange={e => { const newSched = [...schedule]; newSched[i].time = e.target.value; setSchedule(newSched); }} />
+                      <input className="bg-white text-slate-700 text-sm flex-1 p-2 rounded-lg border border-slate-200 outline-none shadow-sm font-medium" value={item.session} onChange={e => { const newSched = [...schedule]; newSched[i].session = e.target.value; setSchedule(newSched); }} />
                     </div>
                   ) : (
                     <>
@@ -269,21 +295,39 @@ export default function Dashboard({ params }: { params: { id: string } }) {
             </div>
           </section>
 
-          {/* EMAILS PANEL */}
+          {/* 🚀 FIXED: OMNICHANNEL COMMS PANEL */}
           <section>
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><Mail size={14}/> Communication Hub</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2"><Mail size={14}/> Communication Hub</h3>
+              <button onClick={() => { setChatInput("Send all drafted communications"); handleChat({ preventDefault: () => {} } as any); }} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 hover:bg-emerald-500 shadow-sm transition-all"><Send size={12}/> Dispatch All</button>
+            </div>
+            
             <div className="space-y-4">
-              {outputs.emails?.length === 0 && <p className="text-sm text-slate-400 italic text-center p-4">No emails drafted yet.</p>}
-              {outputs.emails?.map((item: any, i: number) => (
-                <div key={i} className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                  <div className="text-xs font-bold text-slate-400 mb-3 bg-slate-50 inline-block px-2.5 py-1 rounded-md">{item.task}</div>
-                  {isEditing ? (
-                    <textarea className="w-full bg-slate-50 text-slate-700 text-sm p-4 rounded-xl border border-slate-200 min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all" value={item.output} onChange={e => { const newOutputs = {...outputs}; newOutputs.emails[i].output = e.target.value; setOutputs(newOutputs); }} />
-                  ) : (
-                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{item.output}</p>
-                  )}
-                </div>
-              ))}
+              {outputs.comms?.length === 0 && <p className="text-sm text-slate-400 italic text-center p-4">No comms drafted yet.</p>}
+              {outputs.comms?.map((item: any, i: number) => {
+                const data = item.output;
+                return (
+                  <div key={i} className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="text-xs font-bold text-slate-500 bg-slate-50 inline-block px-2.5 py-1 rounded-md">{item.task}</div>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${data.status === 'SENT' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{data.status || 'DRAFTED'}</span>
+                    </div>
+
+                    {data.use_email && (
+                      <div className="mb-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        <p className="text-xs text-slate-500 mb-1">📧 <strong>{data.email_subject}</strong></p>
+                        <p className="text-sm text-slate-600 whitespace-pre-wrap">{data.email_body}</p>
+                      </div>
+                    )}
+                    {data.use_whatsapp && (
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                        <p className="text-xs text-green-700 mb-1 font-bold">💬 WhatsApp</p>
+                        <p className="text-sm text-green-800 whitespace-pre-wrap">{data.whatsapp_body}</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </section>
 
@@ -295,11 +339,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
               {outputs.marketing?.map((item: any, i: number) => (
                 <div key={i} className="p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100 shadow-sm">
                   <div className="text-xs font-bold text-indigo-500 mb-3 bg-indigo-100 inline-block px-2.5 py-1 rounded-md">{item.task}</div>
-                  {isEditing ? (
-                    <textarea className="w-full bg-white text-slate-700 text-sm p-4 rounded-xl border border-indigo-200 min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm" value={item.output} onChange={e => { const newOutputs = {...outputs}; newOutputs.marketing[i].output = e.target.value; setOutputs(newOutputs); }} />
-                  ) : (
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{item.output}</p>
-                  )}
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{item.output}</p>
                 </div>
               ))}
             </div>
