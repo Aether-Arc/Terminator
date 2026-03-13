@@ -1,44 +1,51 @@
 import json
+import re
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_ollama import ChatOllama
 
 class UpdaterAgent:
     def __init__(self):
-        print("[*] Initializing UpdaterAgent with Ollama (llama3.1:8b)...")
-        # Connect to your local Ollama instance
+        print("[*] Initializing Advanced Dynamic Updater (Llama 3.1:8b)...")
         self.llm = ChatOllama(
-            model="llama3.1:8b",   # Match the tag you have in Ollama
-            temperature=0.1,       # Very low temperature for precise, deterministic edits
-            format="json"          # 🚀 CRITICAL: Forces Llama 3.1 to output raw JSON without markdown formatting
+            model="llama3.1:8b",
+            temperature=0,  # Zero temperature for surgical precision
+            format="json"
         )
 
     async def process_update(self, instructions: str, schedule: list, outputs: dict) -> tuple[list, dict]:
         """
-        Takes the user's instructions and smartly modifies ONLY the relevant parts 
-        of the schedule or outputs using Llama 3.1.
+        An intelligent state mutator that applies delta changes to event plans.
         """
         parser = JsonOutputParser()
 
+        # We give the model a reasoning framework to ensure it doesn't just "guess"
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an Event Updater AI. Your job is to modify an existing event schedule or content based on user instructions.\n"
-                       "You must output ONLY valid JSON. Do not include markdown blocks or conversational text.\n"
+            ("system", """You are the Lead Event Strategist. Your goal is to apply surgical updates to an event plan.
+            
+            OPERATIONAL PROTOCOL:
+            1. REASONING: First, analyze if the user's instruction affects the Timeline (schedule) or Content (outputs).
+            2. TEMPORAL LOGIC: If a time is changed, shift all subsequent events in that day to maintain a logical flow.
+            3. CONTENT INTEGRITY: If specific content is requested (e.g., 'Make emails more formal'), rewrite ONLY those parts.  "You must output ONLY valid JSON. Do not include markdown blocks or conversational text.\n"
                        "Do NOT rewrite everything. Only change the specific items requested.\n"
-                       "Return a strict JSON object with exactly two keys: 'schedule' and 'outputs'.\n"
-                       "{format_instructions}"),
-            ("human", "Current Schedule:\n{schedule}\n\n"
-                      "Current Outputs:\n{outputs}\n\n"
-                      "User Instruction: {instructions}\n\n"
-                      "Apply the instruction and return the updated JSON.")
+            4. JSON ONLY: You must output a JSON object with keys 'schedule' and 'outputs'.
+            
+            {format_instructions}"""),
+            ("human", """CURRENT STATE:
+            Schedule: {schedule}
+            Outputs: {outputs}
+
+            INSTRUCTION: {instructions}
+
+            Apply the updates intelligently. If the instruction is a micro-edit, change only that line. If it is a global change, update all relevant fields.""")
         ])
 
-        # Create the LangChain pipeline
         chain = prompt | self.llm | parser
         
-        print(f"[*] UpdaterAgent analyzing instruction via Ollama: '{instructions}'")
+        print(f"[*] Intelligence Swarm processing instruction: '{instructions}'")
         
         try:
-            # Invoke the local model asynchronously
+            # We pass the current state as a shared context
             response = await chain.ainvoke({
                 "schedule": json.dumps(schedule),
                 "outputs": json.dumps(outputs),
@@ -46,15 +53,13 @@ class UpdaterAgent:
                 "format_instructions": parser.get_format_instructions()
             })
             
-            print("[✅] Ollama successfully generated updated JSON.")
-            
-            # Extract the updated values, fallback to original if the model missed a key
+            # Smart Key Recovery: If the model misses a key, we preserve the old one
             updated_schedule = response.get("schedule", schedule)
             updated_outputs = response.get("outputs", outputs)
             
+            print("[✅] Intelligent Mutation Complete.")
             return updated_schedule, updated_outputs
 
         except Exception as e:
-            print(f"[❌] Error in UpdaterAgent (Ollama generation failed): {e}")
-            # Safe fallback: return the original state so the UI doesn't crash
+            print(f"[❌] Intelligent Mutation Failed: {e}")
             return schedule, outputs
