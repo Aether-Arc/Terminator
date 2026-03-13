@@ -18,6 +18,7 @@ from orchestrator.workflow_graph import build_graph, Context
 from langchain_openai import ChatOpenAI
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, CLOUD_MODEL
 from langgraph.types import Command # 🚀 Required to resume from interrupts
+from agents.resource_agent import ResourceAgent
 
 class EventOrchestrator:
     def __init__(self):
@@ -30,10 +31,11 @@ class EventOrchestrator:
         self.volunteer = VolunteerAgent()
         self.sponsor = SponsorAgent()
         self.updater_agent = UpdaterAgent()
+        self.resource = ResourceAgent()
         
         self.graph = build_graph(
             self.planner, self.scheduler, self.marketing,
-            self.email, self.budget, self.volunteer, self.sponsor, self.updater_agent
+            self.email, self.budget, self.volunteer, self.sponsor, self.updater_agent, self.resource
         )
         
         self.user_context = Context(user_id="user_anmol") 
@@ -69,12 +71,16 @@ class EventOrchestrator:
                     await streamer.broadcast(node_name.capitalize(), "Autonomously generating plan...", "simulating")
         
         final_state = self.graph.get_state(self.thread_config)
+        agent_outputs = final_state.values.get("agent_outputs", {})
         
         return {
             "thread_id": thread_id,
             "workflow_executed": True,
             "selected_plan": final_state.values.get("plan"),
-            "schedule": final_state.values.get("schedule")
+            "schedule": final_state.values.get("schedule"),
+            "marketing": agent_outputs.get("marketing", []),
+            "email_outreach_logs": agent_outputs.get("emails", []),
+            "agent_outputs": agent_outputs
         }
 
     async def approve_plan(self, event_data, streamer):

@@ -2,6 +2,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, CLOUD_MODEL
 from tools.system_tools import swarm_tools
+from langchain_core.utils.json import parse_json_markdown
 import json
 import asyncio
 import re
@@ -37,7 +38,7 @@ class PlannerAgent:
             clean_json_string = match.group(0)
             
             # strict=False allows unescaped control characters (like newlines) inside strings
-            plan_data = json.loads(clean_json_string, strict=False)
+            plan_data = parse_json_markdown(final_text)
             plan_data["content"] = str(plan_data) 
             return plan_data
             

@@ -1,6 +1,9 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import os
+import json
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel

@@ -6,6 +6,8 @@ from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
 from tools.system_tools import swarm_tools
+# Add this import at the top of planner_agent.py AND scheduler_agent.py
+from langchain_core.utils.json import parse_json_markdown
 
 class SchedulerAgent:
     def __init__(self):

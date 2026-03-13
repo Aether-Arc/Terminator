@@ -10,7 +10,7 @@ class CognitiveLoop:
         await streamer.broadcast("PlannerAgent", "Generating candidate strategies...", "thinking")
         
         # 🚀 FIX: Added `await` because generate_multiple_plans is an async function
-        candidates = await self.planner.generate_multiple_plans(event_data, count=3)
+        candidates = await self.planner.generate_multiple_plans(event_data, count=1)
         
         best_plan = None
         highest_score = -1

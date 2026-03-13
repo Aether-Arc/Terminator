@@ -98,6 +98,13 @@ export default function AgentsPage() {
       setScheduleStr(JSON.stringify(result.schedule, null, 2))
       if (result.stability_score) setScore(result.stability_score)
 
+      if (result.marketing) {
+         setMarketing(Array.isArray(result.marketing) ? result.marketing.map((m: any) => `[${m.task}]\n${m.output}`).join("\n\n") : result.marketing);
+      }
+      if (result.email_outreach_logs) {
+         setEmailLogs(result.email_outreach_logs);
+      }
+
       if (result.requires_approval) {
         setStatus("AWAITING_APPROVAL")
         setNodeStatuses(prev => ({ ...prev, Scheduler: "completed", Human_review: "running" }))
@@ -143,6 +150,7 @@ export default function AgentsPage() {
       if (result.marketing) {
          setMarketing(Array.isArray(result.marketing) ? result.marketing.map((m: any) => `[${m.task}]\n${m.output}`).join("\n\n") : result.marketing);
       }
+      
       setEmailLogs(result.email_outreach_logs || result.emails || [])
       setStatus("COMPLETED")
       setNodeStatuses(prev => ({ ...prev, Execution_phase: "completed" }))

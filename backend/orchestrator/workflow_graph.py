@@ -37,7 +37,7 @@ class WorkerState(TypedDict):
     event_data: dict
     schedule: list
 
-def build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sponsor_agent):
+def build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sponsor_agent,resource_agent):
     sub_workflow = StateGraph(ExecutionState)
 
     async def master_orchestrator(state: ExecutionState):
@@ -48,7 +48,9 @@ def build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sp
             {"domain": "email", "specifics": "Draft Initial Welcome Invite"},
             {"domain": "budget", "specifics": "Calculate Venue & Catering Estimates"},
             {"domain": "volunteer", "specifics": "Assign Registration Desk Shifts"},
-            {"domain": "sponsor", "specifics": "Draft Tier 1 Tech Sponsors Pitch"}
+            {"domain": "sponsor", "specifics": "Draft Tier 1 Tech Sponsors Pitch"},
+            {"domain": "resource", "specifics": "Allocate physical rooms for all sessions"} 
+        
         ]
         return {"dynamic_tasks": tasks_to_spawn}
 
@@ -75,6 +77,8 @@ def build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sp
             result = await email.draft_invites(state["event_data"], state["schedule"], specifics)
         elif domain == "budget":
             result = await budget_agent.calculate(state["event_data"],state["schedule"], specifics)
+        elif domain == "resource":
+            result = await resource_agent.allocate(state["event_data"], state["schedule"], specifics)
         elif domain == "volunteer":
             result = await volunteer_agent.assign_shifts(state["event_data"], state["schedule"], specifics)
         elif domain == "sponsor":
@@ -96,7 +100,7 @@ def build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sp
 
 # --- 3. BUILD THE STREAMLINED MAIN GRAPH ---
 # Note: Added 'updater_agent' to the dependencies
-def build_graph(planner, scheduler, marketing, email, budget_agent, volunteer_agent, sponsor_agent, updater_agent):
+def build_graph(planner, scheduler, marketing, email, budget_agent, volunteer_agent, sponsor_agent, updater_agent,  resource_agent):
     workflow = StateGraph(GraphState, context_schema=Context)
 
     async def run_planner(state: GraphState, runtime: Runtime[Context]) -> Command[Literal["scheduler"]]:
@@ -125,11 +129,25 @@ def build_graph(planner, scheduler, marketing, email, budget_agent, volunteer_ag
 
     async def finalize_results(state: GraphState) -> Command[Literal["human_review"]]:
         raw_work = state.get("completed_work", [])
+        
+        # 🚀 FULLY DYNAMIC FIX: 
+        # Loop through all historical work. Because we loop forward, 
+        # newer outputs automatically overwrite older outputs with the same domain/task!
+        latest_work_dict = {}
+        for w in raw_work:
+            # Create a unique signature for the task (e.g., "marketing_Twitter Announcement Thread")
+            unique_task_id = f"{w.get('domain')}_{w.get('task')}"
+            latest_work_dict[unique_task_id] = w
+            
+        # Convert the dictionary back to a flat list of just the freshest results
+        latest_work = list(latest_work_dict.values())
+        
         outputs = {
-            "marketing": [w for w in raw_work if w["domain"] == "marketing"],
-            "emails": [w for w in raw_work if w["domain"] == "email"],
-            "operations": [w for w in raw_work if w["domain"] not in ["marketing", "email"]]
+            "marketing": [w for w in latest_work if w["domain"] == "marketing"],
+            "emails": [w for w in latest_work if w["domain"] == "email"],
+            "operations": [w for w in latest_work if w["domain"] not in ["marketing", "email"]]
         }
+        
         return Command(update={"agent_outputs": outputs}, goto="human_review")
 
     def human_review(state: GraphState) -> Command[Literal["__end__", "updater_node", "planner", "human_review"]]:
@@ -152,7 +170,7 @@ def build_graph(planner, scheduler, marketing, email, budget_agent, volunteer_ag
                     "agent_outputs": feedback.get("agent_outputs", state["agent_outputs"]),
                     "audit_log": ["Manual direct edits applied."]
                 },
-                goto="human_review" # Loop back to let them see it confirmed
+                goto="execution_phase" # Loop back to let them see it confirmed
             )
             
         elif action == "prompt":
@@ -182,14 +200,14 @@ def build_graph(planner, scheduler, marketing, email, budget_agent, volunteer_ag
         
         return Command(
             update={"schedule": new_schedule, "agent_outputs": new_outputs, "audit_log": [f"Updater applied: {feedback}"]},
-            goto="human_review"
+            goto="execution_phase" # Loop back to show the updated state
         )
 
     # Register Nodes
     workflow.add_node("planner", run_planner)
     workflow.add_node("scheduler", run_scheduler)
     
-    execution_subgraph = build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sponsor_agent)
+    execution_subgraph = build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sponsor_agent, resource_agent)
     workflow.add_node("execution_phase", execution_subgraph)
     workflow.add_node("finalize", finalize_results)
     
