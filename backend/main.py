@@ -3,6 +3,7 @@ load_dotenv()
 
 import os
 import json
+import asyncio # 🚀 REQUIRED FOR THE ASYNC DIAGNOSTICS
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +20,7 @@ from langchain_openai import ChatOpenAI
 from config import LOCAL_MODEL, OLLAMA_BASE_URL, OPENAI_API_KEY
 
 # 🚀 IMPORT TOOLS FOR WEB SEARCH TEST
-from tools.system_tools import swarm_tools
+from tools.system_tools import web_search # Import the raw tool, not the array
 from langgraph.prebuilt import create_react_agent
 
 # ===============================
@@ -66,7 +67,7 @@ def run_diagnostics():
             model=LOCAL_MODEL,
             base_url=OLLAMA_BASE_URL,
             api_key=OPENAI_API_KEY,
-            max_tokens=100, # Increased slightly to allow a real answer
+            max_tokens=100, 
             temperature=0
         )
         print(f"[*] Waking model {LOCAL_MODEL}...")
@@ -76,27 +77,18 @@ def run_diagnostics():
     except Exception as e:
         print(f"❌ MODEL ERROR: {e}")
 
-    # 🚀 NEW: WEB SEARCH PRE-FLIGHT TEST
+    # 🚀 FIXED: ASYNCHRONOUS WEB SEARCH PRE-FLIGHT TEST
     if llm:
         try:
             print("[*] Testing Web Search Engine...")
-            # Create a temporary diagnostic agent equipped with your tools
-            test_agent = create_react_agent(llm, swarm_tools)
+            # We use asyncio.run to safely execute the async tool inside the synchronous diagnostic function
+            search_result = asyncio.run(web_search.ainvoke({"query": "What is the capital of France?"}))
             
-            # Force it to look up something realtime that isn't in its training data
-            search_query = "What is the current time and weather in Tokyo right now? You MUST use the web_search tool to answer."
-            
-            search_response = test_agent.invoke({"messages": [("user", search_query)]})
-            
-            # Verify if the tool was actually invoked in the message history
-            messages = search_response.get("messages", [])
-            tool_was_called = any(msg.type == "tool" for msg in messages)
-            
-            if tool_was_called:
-                print(f"✅ WEB SEARCH: ONLINE & Tool Execution Successful")
-                print(f"   [Search Result]: '{messages[-1].content.strip()}'")
+            if search_result and "failed" not in search_result.lower():
+                print("✅ WEB SEARCH: ONLINE")
+                print(f"   [Result Snippet]: '{search_result[:60]}...'")
             else:
-                print("⚠️ WEB SEARCH: LLM replied, but did NOT trigger the search tool. It might be hallucinating.")
+                print("❌ WEB SEARCH FAILED")
                 
         except Exception as e:
             print(f"❌ WEB SEARCH ERROR: {e}")
@@ -235,16 +227,15 @@ async def handle_smart_chat(request: Request):
     data = await request.json()
     thread_id = data.get("thread_id")
     
-    # 🚀 FIXED: We extract the 'payload' object passed by React
+    # Extract the payload passed by React
     payload = data.get("payload", {})
     
     if not thread_id:
         raise HTTPException(status_code=400, detail="Missing thread_id")
 
     try:
-        # Route the request through the Orchestrator
         if payload.get("action") == "prompt":
-            # If it's a typed instruction, let the LLM brain decide what to do!
+            # If it's a typed instruction, let the LLM brain decide what to do
             result = await orchestrator.route_user_intent(
                 thread_id, 
                 payload.get("message"), 
