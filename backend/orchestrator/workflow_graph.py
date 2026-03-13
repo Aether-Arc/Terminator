@@ -74,7 +74,7 @@ def build_execution_subgraph(marketing, email, budget_agent, volunteer_agent, sp
         elif domain == "email":
             result = await email.draft_invites(state["event_data"], state["schedule"], specifics)
         elif domain == "budget":
-            result = await budget_agent.calculate(state["event_data"], specifics)
+            result = await budget_agent.calculate(state["event_data"],state["schedule"], specifics)
         elif domain == "volunteer":
             result = await volunteer_agent.assign_shifts(state["event_data"], state["schedule"], specifics)
         elif domain == "sponsor":
@@ -114,8 +114,8 @@ def build_graph(planner, scheduler, marketing, email, budget_agent, volunteer_ag
             goto="scheduler"
         )
 
-    def run_scheduler(state: GraphState) -> Command[Literal["execution_phase"]]:
-        schedule = scheduler.create_schedule(state["plan"])
+    async def run_scheduler(state: GraphState) -> Command[Literal["execution_phase"]]:
+        schedule = await scheduler.create_schedule(state["plan"])
         
         # ROUTING: Instead of human review, immediately draft all assets!
         return Command(

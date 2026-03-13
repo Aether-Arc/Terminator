@@ -2,24 +2,30 @@ import EventForm from '../components/EventForm'
 
 export default function Home() {
   return (
-    <div className="h-full flex flex-col p-4 relative overflow-y-auto">
-      <div className="scanline"></div>
+    <div className="min-h-screen bg-slate-50 flex flex-col p-4 relative font-sans text-slate-800">
       
-      {/* VS Code Breadcrumbs */}
-      <div className="text-xs text-gray-400 mb-4 flex items-center gap-2 border-b border-vscode-border pb-2 font-mono">
-        <span>eventos-ai-swarm</span>
-        <span>&gt;</span>
-        <span>src</span>
-        <span>&gt;</span>
-        <span className="text-vscode-blue">setup.tsx</span>
-      </div>
-
-      <div className="mb-6 flex flex-col items-center justify-center mt-4">
-        <h1 className="text-3xl font-bold text-vscode-blue tracking-widest font-sans">EventOS INIT</h1>
-        <p className="text-gray-500 font-mono text-xs mt-2">Configure environment variables and data sources to boot the Swarm.</p>
+      {/* Subtle Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+      
+      <div className="relative z-10 flex flex-col items-center justify-center mt-12 mb-8">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold mb-6">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+          </span>
+          Swarm Engine Online
+        </div>
+        <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight text-center">
+          Event<span className="text-indigo-600">OS</span>
+        </h1>
+        <p className="text-slate-500 text-sm md:text-base mt-3 max-w-xl text-center leading-relaxed">
+          Brief your AI Swarm. Our autonomous agents will research, budget, schedule, and draft assets for your next event in seconds.
+        </p>
       </div>
       
-      <EventForm />
+      <div className="relative z-10 pb-12">
+        <EventForm />
+      </div>
     </div>
   )
 }

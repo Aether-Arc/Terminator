@@ -1,10 +1,53 @@
 import pandas as pd
 import re
 import io
+from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import create_react_agent
+from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
+from tools.system_tools import swarm_tools
 
 class EmailAgent:
+    def __init__(self):
+        self.llm = ChatOpenAI(
+            model=LOCAL_MODEL,
+            base_url=OLLAMA_BASE_URL,
+            api_key=OPENAI_API_KEY,
+            temperature=0.3
+        )
+        # 🚀 Bind the internet search tools to the email agent
+        self.agent_executor = create_react_agent(self.llm, swarm_tools)
+
     def validate_email(self, email):
         return re.match(r"[^@]+@[^@]+\.[^@]+", str(email))
+
+    async def draft_invites(self, event_data: dict, schedule: list, specifics: str):
+        print(f"[*] EmailAgent: Researching & Drafting content for -> {specifics}")
+        
+        event_name = event_data.get("name", "our upcoming event")
+        date = event_data.get("date", "a date to be announced")
+        location = event_data.get("location", "TBD")
+        
+        prompt = f"""
+        You are an expert corporate communications copywriter drafting an email for '{event_name}' taking place on {date} at {location}.
+        
+        SPECIFIC TASK: {specifics}
+        
+        MANDATORY TOOL USE:
+        Use the 'web_search' tool to look up an interesting, recent statistic or exciting news fact related to the industry or theme of this event.
+        
+        Draft a highly engaging, professional email invite. Integrate the fact you just researched into the opening paragraph to hook the reader. 
+        Keep the email concise, warm, and professional.
+        """
+        
+        try:
+            # 🚀 Agent will search the web, then write the email
+            response = await self.agent_executor.ainvoke({"messages": [("user", prompt)]})
+            return response["messages"][-1].content
+        except Exception as e:
+            print(f"[*] EmailAgent Error: {e}")
+            return f"Subject: You're Invited to {event_name}!\n\nJoin us on {date} at {location} for an incredible experience. Regarding: {specifics}."
+
+   
 
     def send_invites(self, csv_content=None, base_draft="You are invited to the event!"):
         print("[*] EmailAgent: Executing outreach protocol...")

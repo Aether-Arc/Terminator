@@ -4,7 +4,7 @@ from config import OLLAMA_BASE_URL, OPENAI_API_KEY, CLOUD_MODEL
 from tools.system_tools import swarm_tools
 import json
 import asyncio
-import re # <-- NEW: Needed for bulletproof JSON extraction
+import re
 
 class PlannerAgent:
     def __init__(self):
@@ -15,35 +15,43 @@ class PlannerAgent:
             temperature=0.4 
         )
         
-        # This wrapper is what gives Llama 3.1 the ability to Web Scrap!
+        # This wrapper gives Llama 3.1 the ability to Web Scrape!
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
 
     async def _generate_single_branch(self, prompt, i):
         try:
-            # 1. Trigger the ReAct Cognitive Loop (Allows Web Search Tool Usage)
+            # 1. Trigger the ReAct Cognitive Loop
             response = await self.agent_executor.ainvoke({"messages": [("user", prompt)]})
             final_text = response["messages"][-1].content
             
-            # 2. BULLETPROOF JSON EXTRACTOR: Ignores all conversational filler from local LLMs
-            match = re.search(r'\{.*\}', final_text, re.DOTALL)
+            # 2. BULLETPROOF JSON EXTRACTOR
+            # Clean markdown code blocks if the LLM wrapped the output
+            clean_text = final_text.replace("```json", "").replace("```", "").strip()
+            
+            # Extract everything from the first '{' to the last '}'
+            match = re.search(r'\{.*\}', clean_text, re.DOTALL)
             
             if not match:
                 raise ValueError("No JSON object found in LLM response.")
                 
             clean_json_string = match.group(0)
-            plan_data = json.loads(clean_json_string)
+            
+            # strict=False allows unescaped control characters (like newlines) inside strings
+            plan_data = json.loads(clean_json_string, strict=False)
             plan_data["content"] = str(plan_data) 
             return plan_data
             
         except Exception as e:
             print(f"Agent/Tool Error on branch {i}: {e}")
             return {
-                "plan_overview": f"Emergency Contingency Plan Option {i+1}",
-                "sessions": [{"name": "Core Phase", "day": 1, "start_time": "10:00 AM", "end_time": "02:00 PM", "requires_main_stage": False}],
+                "plan_overview": f"Emergency Contingency Plan Option {i+1}. The AI failed to output strictly valid JSON.",
+                "sessions": [
+                    {"name": "Emergency Core Phase", "day": 1, "start_time": "10:00 AM", "end_time": "02:00 PM", "requires_main_stage": False}
+                ],
                 "content": "Emergency Fallback"
             }
 
-    async def generate_multiple_plans(self, event_data, count=1): # count=1 for local GPU speed
+    async def generate_multiple_plans(self, event_data, count=1): 
         event_name = event_data.get('name', 'Event')
         crowd = event_data.get('expected_crowd', 100)
         history = event_data.get("historical_context", "No past data.")
@@ -75,6 +83,7 @@ class PlannerAgent:
             3. FLEXIBILITY: Generate as many (or as few) sessions as necessary to fulfill the prompt.
             
             Respond ONLY in valid JSON format exactly like this structure:
+            CRITICAL RULE: Escape all double quotes inside your text values using a backslash (e.g., \\"). 
             {{
                 "plan_overview": "Explain your logic. Include what you learned from the web search.",
                 "sessions": [

@@ -6,13 +6,16 @@ class VolunteerAgent:
     def __init__(self):
         self.llm = ChatOpenAI(model=LOCAL_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0.3)
 
-    async def assign_shifts(self, event_data, schedule):
+    # ADDED 'specifics' parameter
+    async def assign_shifts(self, event_data, schedule, specifics):
         crowd = event_data.get("expected_crowd", 500)
         
         prompt = f"""
         You are the Volunteer Coordinator for an event of {crowd} people.
         Here is the locked mathematical schedule:
         {json.dumps(schedule, indent=2)}
+        
+        SPECIFIC TASK: {specifics}
         
         Analyze the schedule. Some sessions (like Lunch or Registration) require massive crowd control. Other sessions (like Keynotes) require AV support.
         

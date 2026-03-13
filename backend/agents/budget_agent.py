@@ -1,35 +1,58 @@
 from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import create_react_agent
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
+from tools.system_tools import swarm_tools
 import json
 
 class BudgetAgent:
     def __init__(self):
-        self.llm = ChatOpenAI(model=LOCAL_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0.2)
-        self.baseline_budget = 50000
+        self.llm = ChatOpenAI(
+            model=LOCAL_MODEL, 
+            base_url=OLLAMA_BASE_URL, 
+            api_key=OPENAI_API_KEY, 
+            temperature=0.2
+        )
+        # 🚀 Bind tools so the agent can look up current local prices
+        self.agent_executor = create_react_agent(self.llm, swarm_tools)
 
-    async def calculate(self, event_data):
+    # 🚀 Notice we added `schedule` so it can see exactly what the other agents planned!
+    async def calculate(self, event_data, schedule, specifics):
         crowd = event_data.get("expected_crowd", 500)
-        venue = event_data.get("venue", "Convention Center")
+        location = event_data.get("location", "a major tech hub")
+        event_name = event_data.get("name", "Event")
         
         prompt = f"""
-        You are the Chief Financial Officer (CFO) for an event.
-        - Crowd: {crowd} people
-        - Location/Style: {venue}
-        - Total Available Budget: ${self.baseline_budget}
+        You are the Chief Financial Officer (CFO) for '{event_name}' in {location}.
         
-        Generate a highly realistic, itemized budget breakdown. You must factor in hidden costs (insurance, WiFi scaling, AV equipment).
+        CRITICAL EVENT CONTEXT:
+        - Expected Crowd: {crowd} people
+        - Location: {location}
+        - Exact Schedule Planned by the Swarm: {json.dumps(schedule, indent=2)}
+        
+        SPECIFIC TASK: {specifics}
+        
+        BOTTOM-UP BUDGETING PROTOCOL:
+        1. Do NOT use a predefined total. You must build the budget from the bottom up.
+        2. Analyze the Schedule carefully. If there is a lunch break, budget for catering. If there is a keynote, budget for AV & speaker fees. If it's a 2-day schedule, double the venue costs.
+        3. MANDATORY TOOL USE: Use the 'web_search' tool to find realistic 2024-2025 average prices IN {location} for the specific line items you identify.
+        
+        Calculate the exact total by summing up your researched line items.
         
         Respond ONLY in valid JSON format:
         {{
-            "total_projected_cost": 48000,
-            "status": "Under Budget",
+            "total_calculated_cost": 54200,
+            "pricing_location": "{location}",
             "line_items": [
-                {{"category": "Catering", "cost": 15000, "notes": "$30 per head for 500 people"}}
+                {{"category": "Lunch Catering", "cost": 15000, "notes": "Based on $30/head for {crowd} people in {location}"}},
+                {{"category": "AV Rental", "cost": 5000, "notes": "Required for 'Technical Keynote' session"}}
             ]
         }}
         """
-        response = await self.llm.ainvoke(prompt)
         try:
-            return json.loads(response.content.replace("```json", "").replace("```", "").strip())
-        except:
-            return {"total_projected_cost": self.baseline_budget, "status": "Unknown", "line_items": []}
+            print("[*] BudgetAgent: Cross-referencing schedule & researching local prices...")
+            response = await self.agent_executor.ainvoke({"messages": [("user", prompt)]})
+            clean_json = response["messages"][-1].content.replace("```json", "").replace("```", "").strip()
+            return json.loads(clean_json)
+        except Exception as e:
+            print(f"Budget Agent Error: {e}")
+            return {"total_calculated_cost": 0, "pricing_location": location, "line_items": [{"error": "Failed to calculate budget."}]}

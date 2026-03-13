@@ -7,23 +7,11 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['var(--font-orbitron)', 'sans-serif'],
-        mono: ['var(--font-fira-code)', 'monospace'],
+        // Modern, clean, Vercel/Stripe-like font stack
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
       },
-      colors: {
-        vscode: {
-          bg: '#1e1e1e',
-          sidebar: '#252526',
-          activityBar: '#333333',
-          text: '#d4d4d4',
-          blue: '#569cd6',
-          green: '#6a9955',
-          orange: '#ce9178',
-          yellow: '#dcdcaa',
-          purple: '#c586c0',
-          border: '#3c3c3c'
-        }
-      }
+      // Removed the vscode dark mode colors. We will use standard Tailwind slate/indigo/emerald palettes.
     },
   },
   plugins: [],

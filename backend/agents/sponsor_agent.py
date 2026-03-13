@@ -12,16 +12,18 @@ class SponsorAgent:
             api_key=OPENAI_API_KEY,
             temperature=0.5
         )
-        # Bind web search tools so it can find real-time sponsors
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
 
-    async def draft_sponsorships(self, event_data):
+    # ADDED 'specifics' parameter
+    async def draft_sponsorships(self, event_data, specifics):
         event_name = event_data.get("name", "Tech Event")
         theme = event_data.get("marketing_prompt", "Technology")
         crowd_size = event_data.get("expected_crowd", 500)
 
         prompt = f"""
         You are the Head of Corporate Partnerships for '{event_name}', a {theme} event with {crowd_size} attendees.
+        
+        SPECIFIC TASK: {specifics}
         
         MANDATORY TOOL USE:
         Use the 'web_search' tool to find "companies currently sponsoring {theme} hackathons and conferences in 2026".
