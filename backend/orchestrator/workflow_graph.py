@@ -92,7 +92,7 @@ def build_marketing_subgraph(marketing, comms_agent, design_agent):
             elif domain == "design": return await design_agent.generate_cards(state["event_data"],state.get("schedule", []), specifics)
 
         try:
-            result = await asyncio.wait_for(run_agent(), timeout=45.0)
+            result = await asyncio.wait_for(run_agent(), timeout=180.0)
             return {"completed_work": [{"domain": domain, "task": specifics, "output": result, "needs_revision": True}]}
         except Exception as e:
             return {"completed_work": [{"domain": domain, "task": specifics, "output": {"status": "ERROR", "error": str(e)}, "needs_revision": False}]}
@@ -169,7 +169,7 @@ def build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, reso
             elif domain == "itinerary": return await itinerary_agent.expand_schedule(state["event_data"], state["schedule"])
 
         try:
-            result = await asyncio.wait_for(run_agent(), timeout=45.0)
+            result = await asyncio.wait_for(run_agent(), timeout=180.0)
             return {"completed_work": [{"domain": domain, "task": specifics, "output": result}]}
         except Exception as e:
             return {"completed_work": [{"domain": domain, "task": specifics, "output": {"status": "ERROR", "error": str(e)}}]}

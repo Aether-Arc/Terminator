@@ -510,32 +510,45 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
               {outputs.operations?.map((item: any, i: number) => {
                 const isObject = typeof item.output === 'object' && item.output !== null;
-                const isBudget = item.domain === 'budget' && isObject && item.output.total_calculated_cost !== undefined;
+                const domain = item.domain || "operation";
 
                 return (
-                  <div key={i} className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
+                  <div key={i} className={`p-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full hover:shadow-md transition-shadow ${domain === 'itinerary' ? 'md:col-span-2' : ''}`}>
+                    
+                    {/* Card Header */}
                     <div className="flex justify-between items-start mb-4">
                       <span className={`text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-widest shadow-sm ${
-                        isBudget ? 'text-emerald-700 bg-emerald-100' : 'text-amber-700 bg-amber-100'
+                        domain === 'budget' ? 'text-emerald-700 bg-emerald-100' : 
+                        domain === 'volunteer' ? 'text-blue-700 bg-blue-100' :
+                        domain === 'sponsor' ? 'text-purple-700 bg-purple-100' :
+                        domain === 'itinerary' ? 'text-rose-700 bg-rose-100' :
+                        'text-amber-700 bg-amber-100'
                       }`}>
-                        {item.domain || "Operation"}
+                        {domain}
                       </span>
                       <span className="text-xs font-bold text-slate-400 max-w-[60%] truncate text-right" title={item.task}>
                         {item.task}
                       </span>
                     </div>
 
+                    {/* Card Content Area */}
                     <div className="flex-1 bg-slate-50/50 rounded-xl p-4 border border-slate-100 overflow-y-auto max-h-[350px]">
-                      {isBudget ? (
+                      
+                      {/* 💰 BUDGET UI */}
+                      {domain === 'budget' && isObject ? (
                         <div className="space-y-4">
                           <div className="flex justify-between items-center bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-200 shadow-sm">
                             <span className="font-bold text-sm">Total Est. Cost</span>
                             <span className="font-mono font-black text-xl flex items-center gap-1">
-                              {/* 🚀 DYNAMIC MATH: If AI fails to sum, React does it automatically */}
                               {(() => {
-                                let total = Number(item.output.total_calculated_cost) || 0;
+                                const parseCost = (val: any) => {
+                                  if (!val) return 0;
+                                  const cleaned = String(val).replace(/[^0-9.-]+/g, "");
+                                  return Number(cleaned) || 0;
+                                };
+                                let total = parseCost(item.output.total_calculated_cost);
                                 if (total === 0 && Array.isArray(item.output.line_items)) {
-                                  total = item.output.line_items.reduce((sum: number, li: any) => sum + (Number(li.cost) || 0), 0);
+                                  total = item.output.line_items.reduce((sum: number, li: any) => sum + parseCost(li.cost), 0);
                                 }
                                 return `${item.output.currency || "INR"} ${total.toLocaleString()}`;
                               })()}
@@ -543,20 +556,101 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                           </div>
                           <div className="space-y-2">
                             {item.output.line_items?.map((li: any, idx: number) => (
-                              <div key={idx} className="flex flex-col gap-1 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                                <div className="flex justify-between items-center">
+                              <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                <div>
                                   <p className="font-bold text-slate-700 text-sm">{li.category || "Item"}</p>
-                                  <span className="font-mono text-slate-600 font-semibold text-sm">
-                                    {Number(li.cost || 0).toLocaleString()}
-                                  </span>
+                                  <p className="text-[10px] text-slate-400 italic line-clamp-1">{li.notes || "No notes."}</p>
                                 </div>
-                                <p className="text-xs text-slate-400 italic leading-relaxed">{li.notes || "No notes provided."}</p>
+                                <span className="font-mono text-slate-600 font-semibold text-sm">
+                                  {Number(String(li.cost || 0).replace(/[^0-9.-]+/g, "")).toLocaleString()}
+                                </span>
                               </div>
                             ))}
                           </div>
-                          <p className="text-[10px] text-slate-400 text-right italic pt-2">Location Indexed: {item.output.pricing_location || "Unknown"}</p>
                         </div>
-                      ) : isObject ? (
+                      ) 
+                      
+                      /* 🙋‍♂️ VOLUNTEER UI */
+                      : domain === 'volunteer' && isObject ? (
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center bg-blue-50 text-blue-800 p-4 rounded-xl border border-blue-200 shadow-sm">
+                            <span className="font-bold text-sm">Total Volunteers Needed</span>
+                            <span className="font-black text-xl">{item.output.total_volunteers_required || 0}</span>
+                          </div>
+                          <div className="space-y-2">
+                            {item.output.roles?.map((role: any, idx: number) => (
+                              <div key={idx} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-start mb-1">
+                                  <p className="font-bold text-slate-800 text-sm">{role.role_name}</p>
+                                  <span className="bg-slate-100 text-slate-600 text-xs font-bold px-2 py-0.5 rounded-lg">{role.headcount} slots</span>
+                                </div>
+                                <p className="text-xs text-indigo-600 font-semibold mb-1">{role.active_time}</p>
+                                <p className="text-[11px] text-slate-500 italic">{role.reason}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+
+                      /* 🤝 SPONSOR UI */
+                      /* 🤝 SPONSOR UI */
+                      : domain === 'sponsor' && isObject ? (
+                        <div className="space-y-4">
+                          {/* Pitch Email */}
+                          <div className="bg-purple-50 text-purple-800 p-4 rounded-xl border border-purple-200 shadow-sm">
+                            <h4 className="font-bold text-sm mb-2 flex items-center gap-2">
+                              📧 {item.output.pitch_subject || "Sponsorship Pitch"}
+                            </h4>
+                            <p className="text-xs opacity-80 whitespace-pre-wrap leading-relaxed">{item.output.pitch_body || "Please see our tiers below."}</p>
+                          </div>
+                          
+                          {/* Sponsorship Tiers */}
+                          <div>
+                            <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Sponsorship Tiers</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              {item.output.tiers?.map((tier: any, idx: number) => (
+                                <div key={idx} className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm text-center flex flex-col">
+                                  <span className="font-black text-slate-700 text-sm uppercase tracking-wide">{tier.name}</span>
+                                  <span className="text-purple-600 font-mono font-bold text-lg my-1">{tier.price}</span>
+                                  <p className="text-[10px] text-slate-500 italic flex-1">{tier.perks}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Target Companies */}
+                          <div>
+                            <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Target Companies</h4>
+                            <div className="space-y-2">
+                              {item.output.target_sponsors?.map((sponsor: any, idx: number) => (
+                                <div key={idx} className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm flex flex-col gap-1">
+                                  <span className="font-bold text-slate-700 text-sm">{sponsor.company}</span>
+                                  <p className="text-xs text-slate-500 italic">"{sponsor.pitch}"</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )
+
+                      /* 🗺️ ITINERARY UI (Expands to full width) */
+                      : domain === 'itinerary' && Array.isArray(item.output) ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {item.output.map((event: any, idx: number) => (
+                            <div key={idx} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-start mb-1">
+                                  <p className="font-bold text-slate-800 text-sm truncate">{event.session}</p>
+                                  <span className="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-0.5 rounded uppercase">{event.type || 'Event'}</span>
+                                </div>
+                                <p className="text-xs text-indigo-600 font-semibold mb-2">{event.time} • {event.location || 'TBD'}</p>
+                                <p className="text-[11px] text-slate-500 italic line-clamp-2">{event.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )
+
+                      /* 🛑 RAW JSON FALLBACK (For any agent we haven't built a UI for yet) */
+                      : isObject ? (
                         <pre className="text-[11px] text-slate-600 font-mono whitespace-pre-wrap leading-relaxed">
                           {JSON.stringify(item.output, null, 2)}
                         </pre>
