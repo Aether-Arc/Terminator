@@ -15,10 +15,6 @@ class PlannerAgent:
         self.llm = get_resilient_llm(temperature=0.45)
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
 
-    # ============================================
-    # SINGLE PLAN
-    # ============================================
-
     async def _generate_single_branch(self, prompt, i):
 
         try:
