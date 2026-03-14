@@ -3,7 +3,9 @@ load_dotenv()
 
 import os
 import json
-import asyncio # 🚀 REQUIRED FOR THE ASYNC DIAGNOSTICS
+import asyncio
+import urllib.parse # 🚀 REQUIRED FOR URL DECODING
+import uuid
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,8 +21,7 @@ from memory.vector_store import store_memory, search_memory
 from langchain_openai import ChatOpenAI
 from config import LOCAL_MODEL, OLLAMA_BASE_URL, OPENAI_API_KEY
 
-# 🚀 IMPORT TOOLS FOR WEB SEARCH TEST
-from tools.system_tools import web_search # Import the raw tool, not the array
+from tools.system_tools import web_search
 from langgraph.prebuilt import create_react_agent
 
 # ===============================
@@ -38,29 +39,22 @@ def run_diagnostics():
     print("\n" + "⚙️ " * 20)
     print("RUNNING PRE-FLIGHT SYSTEM CHECKS...")
 
-    # Redis Test
     try:
         store_state("diagnostic_test", "system_online")
         result = get_state("diagnostic_test")
-        if result:
-            print("✅ REDIS MEMORY: ONLINE")
-        else:
-            print("⚠️ REDIS MEMORY: OFFLINE")
+        if result: print("✅ REDIS MEMORY: ONLINE")
+        else: print("⚠️ REDIS MEMORY: OFFLINE")
     except Exception as e:
         print(f"❌ REDIS ERROR: {e}")
 
-    # Vector store
     try:
         store_memory("Diagnostic event memory.")
         search_result = search_memory("Diagnostic")
-        if search_result and "documents" in search_result:
-            print("✅ VECTOR STORE: ONLINE")
-        else:
-            print("❌ VECTOR STORE FAILED")
+        if search_result and "documents" in search_result: print("✅ VECTOR STORE: ONLINE")
+        else: print("❌ VECTOR STORE FAILED")
     except Exception as e:
         print(f"❌ VECTOR STORE ERROR: {e}")
 
-    # LLM wakeup
     llm = None
     try:
         llm = ChatOpenAI(
@@ -77,11 +71,9 @@ def run_diagnostics():
     except Exception as e:
         print(f"❌ MODEL ERROR: {e}")
 
-    # 🚀 FIXED: ASYNCHRONOUS WEB SEARCH PRE-FLIGHT TEST
     if llm:
         try:
             print("[*] Testing Web Search Engine...")
-            # We use asyncio.run to safely execute the async tool inside the synchronous diagnostic function
             search_result = asyncio.run(web_search.ainvoke({"query": "What is the capital of France?"}))
             
             if search_result and "failed" not in search_result.lower():
@@ -113,21 +105,6 @@ app.add_middleware(
 orchestrator = EventOrchestrator()
 
 # ===============================
-# Helper for LangGraph resume
-# ===============================
-async def resume_graph(thread_id: str, payload: dict):
-    # Safety check: Verify state exists and can be resumed
-    config = {"configurable": {"thread_id": thread_id}}
-    state = orchestrator.graph.get_state(config)
-    if not state.next:
-        raise HTTPException(status_code=400, detail="Graph is not currently paused for human review.")
-        
-    return await orchestrator.graph.ainvoke(
-        Command(resume=payload),
-        config=config
-    )
-
-# ===============================
 # WebSocket (Live Swarm Stream)
 # ===============================
 @app.websocket("/ws/swarm")
@@ -140,7 +117,7 @@ async def websocket_endpoint(websocket: WebSocket):
         swarm_streamer.disconnect(websocket)
 
 # ===============================
-# Event Planning
+# Event Planning & Approval
 # ===============================
 @app.post("/plan_event")
 async def plan_event(event_data: dict):
@@ -149,9 +126,55 @@ async def plan_event(event_data: dict):
 
 @app.post("/approve_plan")
 async def approve_plan(event_data: dict):
-    thread_id = event_data.get("thread_id")
-    payload = {"action": "approve"}
-    return await resume_graph(thread_id, payload)
+    # 1. Decode the thread ID
+    thread_id = urllib.parse.unquote(event_data.get("thread_id", ""))
+    edited_plan = event_data.get("edited_plan")
+    
+    try:
+        # 🚀 THE UPGRADE: Forcefully inject UI edits directly into LangGraph Memory!
+        if edited_plan:
+            config = {"configurable": {"thread_id": thread_id}}
+            orchestrator.graph.update_state(config, {"schedule": edited_plan})
+            print(f"[*] Successfully saved manual UI edits to thread: {thread_id}")
+        
+        # 2. Tell the graph to resume from its paused state
+        payload = {"action": "approve"}
+        return await orchestrator.resume_workflow(thread_id, payload, swarm_streamer)
+        
+    except Exception as e:
+        print(f"[❌] Approve Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ===============================
+# Fork / Time Travel
+# ===============================
+@app.post("/fork_event")
+async def fork_event(request: ForkRequest):
+    try:
+        clean_thread_id = urllib.parse.unquote(request.thread_id)
+        config = {"configurable": {"thread_id": clean_thread_id}}
+        old_state = orchestrator.graph.get_state(config)
+        
+        if not old_state.values:
+            print(f"[⚠️] Warning: Could not find thread '{clean_thread_id}'. Spawning a fresh event instead.")
+            event_data = {"name": "Forked Event", "user_constraints": request.new_prompt}
+            new_thread_id = f"Forked Event [{str(uuid.uuid4())[:4]}]"
+            result = await orchestrator.plan_event(event_data, swarm_streamer, thread_id=new_thread_id)
+            return result
+            
+        event_data = old_state.values.get("event_data", {}).copy()
+        
+        old_constraints = event_data.get("user_constraints", "")
+        event_data["user_constraints"] = f"{old_constraints}\n[FORK UPDATE]: {request.new_prompt}"
+        
+        new_thread_id = f"{event_data.get('name', 'Forked Event')} [{str(uuid.uuid4())[:4]}]"
+        
+        result = await orchestrator.plan_event(event_data, swarm_streamer, thread_id=new_thread_id)
+        return result
+        
+    except Exception as e:
+        print(f"[❌] Fork Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ===============================
 # Crisis Simulation
@@ -162,15 +185,12 @@ async def crisis(data: dict):
     return result
 
 # ===============================
-# Status
+# Endpoints requiring URL decoding
 # ===============================
 @app.get("/status")
 def status():
     return {"system": "EventOS DeepMind Swarm running"}
 
-# ===============================
-# Thread History
-# ===============================
 @app.get("/history")
 async def get_history():
     threads = orchestrator.get_thread_history()
@@ -178,15 +198,14 @@ async def get_history():
 
 @app.get("/api/history/{thread_id}")
 async def get_api_history(thread_id: str):
-    return orchestrator.get_event_details(thread_id)
+    clean_thread_id = urllib.parse.unquote(thread_id)
+    return orchestrator.get_event_details(clean_thread_id)
 
-# ===============================
-# Get Thread State
-# ===============================
 @app.get("/thread/{thread_id}")
 async def get_thread_state(thread_id: str):
     try:
-        config = {"configurable": {"thread_id": thread_id}}
+        clean_thread_id = urllib.parse.unquote(thread_id)
+        config = {"configurable": {"thread_id": clean_thread_id}}
         state = orchestrator.graph.get_state(config)
 
         if not state.values:
@@ -204,45 +223,50 @@ async def get_thread_state(thread_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ===============================
-# Resume Crashed Event
-# ===============================
-@app.post("/resume_event")
-async def resume_crashed_event():
+@app.get("/api/ledger/{thread_id}")
+async def get_master_ledger(thread_id: str):
     try:
-        result = await orchestrator.resume_event(swarm_streamer)
-        return result
+        clean_thread_id = urllib.parse.unquote(thread_id)
+        config = {"configurable": {"thread_id": clean_thread_id}}
+        state = orchestrator.graph.get_state(config)
+        
+        if not state.values:
+            return {"error": "Ledger not found", "is_empty": True}
+            
+        return {
+            "thread_id": clean_thread_id,
+            "event_data": state.values.get("event_data", {}),
+            "schedule": state.values.get("schedule", []),
+            "agent_outputs": state.values.get("agent_outputs", {}),
+            "audit_log": state.values.get("audit_log", []),
+            "is_empty": False
+        }
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to read LangGraph ledger: {e}")
 
 # ===============================
 # 🚀 SMART CHAT (The Brain Router)
 # ===============================
 @app.post("/api/chat")
 async def handle_smart_chat(request: Request):
-    """
-    Handles chat commands, UI direct edits, and physical dispatches
-    by routing them through the Orchestrator's Smart Brain.
-    """
     data = await request.json()
-    thread_id = data.get("thread_id")
+    raw_thread_id = data.get("thread_id")
     
-    # Extract the payload passed by React
-    payload = data.get("payload", {})
-    
-    if not thread_id:
+    if not raw_thread_id:
         raise HTTPException(status_code=400, detail="Missing thread_id")
+        
+    thread_id = urllib.parse.unquote(raw_thread_id)
+    payload = data.get("payload", {})
 
     try:
         if payload.get("action") == "prompt":
-            # If it's a typed instruction, let the LLM brain decide what to do
             result = await orchestrator.route_user_intent(
                 thread_id, 
                 payload.get("message"), 
                 swarm_streamer
             )
         else:
-            # If it's a direct manual edit from the UI or an approval
             result = await orchestrator.resume_workflow(thread_id, payload, swarm_streamer)
             
         return {
@@ -253,28 +277,3 @@ async def handle_smart_chat(request: Request):
     except Exception as e:
         print(f"[❌] Orchestration Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-# ===============================
-# Get Master Ledger
-# ===============================
-@app.get("/api/ledger/{thread_id}")
-async def get_master_ledger(thread_id: str):
-    """Returns the entire centralized event state for the UI directly from LangGraph Memory."""
-    try:
-        config = {"configurable": {"thread_id": thread_id}}
-        state = orchestrator.graph.get_state(config)
-        
-        if not state.values:
-            return {"error": "Ledger not found", "is_empty": True}
-            
-        return {
-            "thread_id": thread_id,
-            "event_data": state.values.get("event_data", {}),
-            "schedule": state.values.get("schedule", []),
-            "agent_outputs": state.values.get("agent_outputs", {}),
-            "audit_log": state.values.get("audit_log", []),
-            "is_empty": False
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read LangGraph ledger: {e}")

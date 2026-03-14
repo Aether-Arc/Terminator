@@ -2,10 +2,22 @@ from langchain_openai import ChatOpenAI
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
 import json
 from config import get_resilient_llm
+from typing import List
+from pydantic import BaseModel, Field
+
+class VolunteerRole(BaseModel):
+    role_name: str
+    headcount: int
+    active_time: str
+    reason: str
+
+class VolunteerOutput(BaseModel):
+    total_volunteers_required: int
+    roles: List[VolunteerRole]
 
 class VolunteerAgent:
     def __init__(self):
-        self.llm = get_resilient_llm(temperature=0.3)
+        self.llm = get_resilient_llm(temperature=0.2).with_structured_output(VolunteerOutput)
 
     # ADDED 'specifics' parameter
     async def assign_shifts(self, event_data, schedule, specifics):

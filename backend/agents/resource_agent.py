@@ -4,11 +4,22 @@ from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
 from tools.system_tools import swarm_tools
 import json
 from config import get_resilient_llm
+from typing import List
+from pydantic import BaseModel, Field
+
+class ResourceAllocation(BaseModel):
+    session: str = Field(description="The exact name of the session")
+    assigned_room: str = Field(description="The chosen facility")
+    reason: str = Field(description="Why this room was chosen")
+
+class ResourceOutput(BaseModel):
+    resource_allocations: List[ResourceAllocation]
 
 class ResourceAgent:
     def __init__(self):
         self.llm = get_resilient_llm(temperature=0.4)
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
+        self.formatter_llm = get_resilient_llm(temperature=0).with_structured_output(ResourceOutput)
         
         # You can eventually fetch this from a database
         self.facility_inventory = {

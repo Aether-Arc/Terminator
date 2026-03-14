@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createEvent, approvePlan, simulateCrisis, fetchHistory, forkEvent, fetchThreadState } from '../../lib/api'
+import { createEvent, approvePlan, simulateCrisis, fetchHistory, forkEvent, fetchThreadState, sendChatCommand } from '../../lib/api'
 import AgentMonitor from '../../components/AgentMonitor'
 import MonteCarloChart from '../../components/MonteCarloChart'
 import PipelineTracker, { NodeStatus } from '../../components/PipelineTracker'
@@ -141,31 +141,55 @@ export default function AgentsPage() {
   }
 
   const handleApprove = async () => {
+    if (!activeThread) {
+      alert("No active thread found to approve.");
+      return;
+    }
+
     setStatus("EXECUTING")
     setNodeStatuses(prev => ({ ...prev, Human_review: "completed", Execution_phase: "running" }))
+    
+    // 1. Safely validate the JSON first
+    let editedScheduleJson;
     try {
-      const editedScheduleJson = JSON.parse(scheduleStr)
-      const result = await approvePlan({ ...eventData, edited_plan: editedScheduleJson })
+      editedScheduleJson = JSON.parse(scheduleStr)
+    } catch (e) {
+      alert("Invalid JSON format in schedule! Please fix the brackets/quotes before approving.")
+      setStatus("AWAITING_APPROVAL")
+      return; // Stop execution if JSON is actually bad
+    }
+
+    // 2. Send the approval to the Backend WITH the thread_id
+    try {
+      // 🚀 THE FIX: Explicitly attach the activeThread as the thread_id!
+      const result = await approvePlan({ 
+        ...eventData, 
+        thread_id: activeThread, 
+        edited_plan: editedScheduleJson 
+      })
       
-      if (result.marketing) {
-         setMarketing(Array.isArray(result.marketing) ? result.marketing.map((m: any) => `[${m.task}]\n${m.output}`).join("\n\n") : result.marketing);
+      // Update the UI with the final generated assets
+      if (result.agent_outputs?.marketing) {
+         setMarketing(Array.isArray(result.agent_outputs.marketing) ? result.agent_outputs.marketing.map((m: any) => `[${m.task || m.domain}]\n${m.output || m.copy}`).join("\n\n") : result.agent_outputs.marketing);
       }
       
-      setEmailLogs(result.email_outreach_logs || result.emails || [])
+      setEmailLogs(result.agent_outputs?.comms || result.email_outreach_logs || [])
       setStatus("COMPLETED")
       setNodeStatuses(prev => ({ ...prev, Execution_phase: "completed" }))
 
+      // Save the finalized data to local storage for the Dashboard
       const finalManifest = {
-        event_name: eventData.name,
+        event_name: eventData?.name,
         schedule: editedScheduleJson, 
-        marketing: result.marketing,
-        email_outreach_logs: result.email_outreach_logs || result.emails,
-        agent_outputs: result.agent_outputs || result.operations || {}
+        marketing: result.agent_outputs?.marketing,
+        email_outreach_logs: result.agent_outputs?.comms,
+        agent_outputs: result.agent_outputs || {}
       }
       localStorage.setItem("swarmResult", JSON.stringify(finalManifest))
 
-    } catch (e) {
-      alert("Invalid JSON format in schedule! Please fix the brackets/quotes before approving.")
+    } catch (e: any) {
+      console.error("Backend Approval Error:", e)
+      alert(`Backend Error: Could not resume the Swarm. Check the terminal!`)
       setStatus("AWAITING_APPROVAL")
     }
   }
@@ -208,22 +232,40 @@ export default function AgentsPage() {
     e.preventDefault()
     if (!chatInput || !activeThread) return;
 
-    setStatus("PLANNING")
-    setNodeStatuses({ Planner: "running", Scheduler: "waiting", Human_review: "waiting", Execution_phase: "waiting" })
+    // 🚀 Update UI to show the Swarm is thinking
+    setStatus("EXECUTING")
+    setNodeStatuses(prev => ({ ...prev, Human_review: "completed", Execution_phase: "running" }))
     const input = chatInput;
     setChatInput("")
 
     try {
-      const result = await forkEvent({ thread_id: activeThread, new_prompt: input })
+      // 🚀 THE FIX: Call the Smart Brain (resume_workflow) instead of the Time Machine!
+      const result = await sendChatCommand(activeThread, input)
 
-      setSchedule(result.schedule)
-      setScheduleStr(JSON.stringify(result.schedule, null, 2))
-      if (result.stability_score) setScore(result.stability_score)
+      // Update the UI with the surgically edited JSON
+      if (result.schedule) {
+        setSchedule(result.schedule)
+        setScheduleStr(JSON.stringify(result.schedule, null, 2))
+      }
+      
+      if (result.agent_outputs) {
+         const outputs = result.agent_outputs;
+         if (outputs.marketing) {
+           setMarketing(Array.isArray(outputs.marketing) ? outputs.marketing.map((m: any) => `[${m.task || m.domain}]\n${m.output || m.copy}`).join("\n\n") : outputs.marketing);
+         }
+         if (outputs.comms) {
+           setEmailLogs(outputs.comms);
+         }
+      }
 
+      // Pause the graph again so the human can review the changes!
       setStatus("AWAITING_APPROVAL") 
-      setNodeStatuses(prev => ({ ...prev, Planner: "completed", Scheduler: "completed", Human_review: "running" }))
+      setNodeStatuses(prev => ({ ...prev, Execution_phase: "completed", Human_review: "running" }))
+      
     } catch (e) {
       console.error(e)
+      setStatus("AWAITING_APPROVAL")
+      alert("Failed to apply intelligent updates. See console.")
     }
   }
 

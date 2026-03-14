@@ -4,11 +4,27 @@ from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
 from tools.system_tools import swarm_tools
 import json
 from config import get_resilient_llm
+from pydantic import BaseModel, Field
+from typing import List
+
+class SponsorTier(BaseModel):
+    name: str = Field(description="e.g., Gold, Silver")
+    price: str = Field(description="e.g., $5,000")
+    perks: str = Field(description="Brief description of benefits")
+
+class TargetSponsor(BaseModel):
+    company: str = Field(description="Real-world company name")
+    pitch: str = Field(description="1-sentence pitch on why they should sponsor")
+
+class SponsorOutput(BaseModel):
+    tiers: List[SponsorTier]
+    target_sponsors: List[TargetSponsor]
 
 class SponsorAgent:
     def __init__(self):
         self.llm = get_resilient_llm(temperature=0.5)
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
+        self.formatter_llm = get_resilient_llm(temperature=0).with_structured_output(SponsorOutput)
 
     # ADDED 'specifics' parameter
     async def draft_sponsorships(self, event_data, specifics):

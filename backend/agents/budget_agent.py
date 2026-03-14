@@ -3,14 +3,27 @@ from langgraph.prebuilt import create_react_agent
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
 from tools.system_tools import swarm_tools
 import json
+from pydantic import BaseModel, Field
+from typing import List
 
 from config import get_resilient_llm
+
+class LineItem(BaseModel):
+    category: str = Field(description="e.g., 'Lunch Catering'")
+    cost: float = Field(description="Calculated cost in USD")
+    notes: str = Field(description="Brief explanation of the calculation")
+
+class BudgetOutput(BaseModel):
+    total_calculated_cost: float = Field(description="The total sum of all line items")
+    pricing_location: str = Field(description="The city where these prices apply")
+    line_items: List[LineItem] = Field(description="List of specific budget allocations")
 
 class BudgetAgent:
     def __init__(self):
         self.llm = get_resilient_llm(temperature=0.2)
         # 🚀 Bind tools so the agent can look up current local prices
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
+        self.llm = get_resilient_llm(temperature=0.2).with_structured_output(BudgetOutput)
 
     # 🚀 Notice we added `schedule` so it can see exactly what the other agents planned!
     async def calculate(self, event_data, schedule, specifics):

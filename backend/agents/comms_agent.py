@@ -1,12 +1,22 @@
 import json
 import re
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
 from langgraph.prebuilt import create_react_agent # 🚀 Required for Web Search abilities
 from langchain_core.utils.json import parse_json_markdown
 from config import CLOUD_MODEL, OLLAMA_BASE_URL, OPENAI_API_KEY
 from tools.system_tools import swarm_tools
 
 from config import get_resilient_llm
+
+class CommsOutput(BaseModel):
+    use_email: bool = Field(description="Whether to send an email")
+    email_subject: str = Field(description="The email subject line")
+    email_body: str = Field(description="The full email body")
+    use_whatsapp: bool = Field(description="Whether to send a WhatsApp")
+    whatsapp_body: str = Field(description="The short WhatsApp message")
+    status: str = Field(default="DRAFTED")
+    recipient: str = Field(default="All Participants")
 
 class CommsAgent:
     def __init__(self):
@@ -15,6 +25,7 @@ class CommsAgent:
 
         # 🚀 THE UPGRADE: We bind the web search tools so the agent can browse the internet!
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
+        self.formatter_llm = get_resilient_llm(temperature=0).with_structured_output(CommsOutput)
 
     async def draft_communications(self, event_data, schedule, specifics):
         """

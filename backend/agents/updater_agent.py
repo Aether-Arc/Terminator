@@ -3,15 +3,18 @@ import re
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_ollama import ChatOllama
+from pydantic import BaseModel, Field
+from typing import Any
+from config import get_resilient_llm
+
+class UpdateOutput(BaseModel):
+    schedule: list = Field(description="The fully updated chronological schedule")
+    outputs: dict = Field(description="The fully updated agent outputs")
 
 class UpdaterAgent:
     def __init__(self):
         print("[*] Initializing Advanced Dynamic Updater (Llama 3.1:8b)...")
-        self.llm = ChatOllama(
-            model="llama3.1:8b",
-            temperature=0,  # Zero temperature for surgical precision
-            format="json"
-        )
+        self.llm = get_resilient_llm(temperature=0).with_structured_output(UpdateOutput)
 
     async def process_update(self, instructions: str, schedule: list, outputs: dict) -> tuple[list, dict]:
         """
