@@ -65,10 +65,14 @@ class EventOrchestrator:
             return []
 
     async def plan_event(self, event_data, streamer, thread_id=None):
+        print(f"[*] Orchestrator received event data: {event_data.get('name')}")
+        raw_name = event_data.get("name", "Unnamed Event")
+        short_hash = str(uuid.uuid4())[:4]
+        self.thread_id = f"{raw_name} [{short_hash}]"
         await streamer.broadcast("Orchestrator", "Initializing Fast Zero-Shot Swarm Sequence...", "thinking")
         if not thread_id: thread_id = f"evt_{str(uuid.uuid4())[:8]}"
         
-        self.thread_config = {"configurable": {"thread_id": thread_id}}
+        self.thread_config = {"configurable": {"thread_id": self.thread_id}}
         raw_csv = event_data.get("csv_content", "")
         if raw_csv:
             await streamer.broadcast("Orchestrator", "Parsing messy CSV participant data...", "simulating")

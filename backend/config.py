@@ -1,8 +1,10 @@
 import os
+from typing import Any
 from dotenv import load_dotenv
 
-# 🚀 1. CRITICAL FIX: Add this import!
 from langchain_openai import ChatOpenAI 
+# 🚀 IMPORT LANGCHAIN CALLBACKS
+from langchain_core.callbacks import BaseCallbackHandler
 
 load_dotenv()
 
@@ -18,6 +20,17 @@ CLOUD_MODEL = "llama3.1:8b-4096"
 # 2. THE LOCAL WORKHORSE
 LOCAL_MODEL = "llama3.1:8b-4096" 
 
+# ==========================================
+# 🚀 CUSTOM CALLBACK: THE FALLBACK ALARM
+# ==========================================
+class FallbackAlertHandler(BaseCallbackHandler):
+    """Listens for errors on the primary LLM and announces the fallback to the terminal."""
+    def on_llm_error(self, error: Exception, **kwargs: Any) -> Any:
+        print("\n" + "⚠️ " * 20)
+        print(f"[🛡️ SHIELD ACTIVATED] NVIDIA NIM API Error Detected: {error}")
+        print(f"[🔄 HYBRID ROUTER] Seamlessly falling back to Local GPU ({LOCAL_MODEL})...")
+        print("⚠️ " * 20 + "\n")
+
 def get_resilient_llm(temperature=0.5):
     """
     Creates a Hybrid LLM Router. 
@@ -32,14 +45,15 @@ def get_resilient_llm(temperature=0.5):
         model="meta/llama-3.3-70b-instruct", 
         temperature=temperature,
         max_retries=0, 
-        timeout=15 
+        timeout=15,
+        callbacks=[FallbackAlertHandler()] # 🚀 ATTACH THE ALARM HERE!
     )
     
     # 2. Fallback Engine: Local Ollama (Reliable Local)
     local_llm = ChatOpenAI(
         base_url=OLLAMA_BASE_URL,
         api_key="ollama", 
-        model=LOCAL_MODEL, # 🚀 2. CRITICAL FIX: Use the Python variable directly!
+        model=LOCAL_MODEL, 
         temperature=temperature,
         max_retries=1
     )

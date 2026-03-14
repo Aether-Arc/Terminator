@@ -6,7 +6,6 @@ import asyncio
 import json
 from typing import TypedDict, Any, List, Annotated, Literal, Dict
 from dataclasses import dataclass
-from config import get_resilient_llm, USE_CRITIC_AGENT # 🚀 IMPORT THE TOGGLE
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -15,6 +14,7 @@ from langgraph.runtime import Runtime
 from langgraph.types import Send, Command, interrupt
 from langchain_openai import ChatOpenAI
 
+from config import get_resilient_llm, USE_CRITIC_AGENT
 
 # ==========================================
 # 1. ADVANCED MEMORY SCHEMAS & REDUCERS
@@ -35,7 +35,7 @@ class GraphState(TypedDict):
     plan: dict
     schedule: Any
     audit_log: Annotated[List[str], operator.add] 
-    completed_work: Annotated[list[dict], merge_work] # 🚀 Auto-deduplicating reducer!
+    completed_work: Annotated[list[dict], merge_work] 
     agent_outputs: dict 
     user_feedback: str
     knowledge_base: Annotated[List[str], operator.add] 
@@ -53,19 +53,27 @@ class WorkerState(TypedDict):
     schedule: list
 
 # ==========================================
-# 2. TEAM 1: MARKETING SUPERVISOR (WITH REFLECTION LOOP)
+# 2. TEAM 1: MARKETING SUPERVISOR
 # ==========================================
 def build_marketing_subgraph(marketing, comms_agent, design_agent):
     graph = StateGraph(SubgraphState)
     critic_llm = get_resilient_llm(temperature=0.1)
 
     async def marketing_supervisor(state: SubgraphState):
-        requested = state["event_data"].get("requested_agents", ["marketing", "comms", "design"])
-        tasks = []
-        if "marketing" in requested: tasks.extend([{"domain": "marketing", "specifics": "Twitter Thread"}, {"domain": "marketing", "specifics": "LinkedIn Post"}])
-        if "comms" in requested: tasks.append({"domain": "comms", "specifics": "Draft Initial Welcome Invite (Email & WhatsApp)"})
-        if "design" in requested: tasks.append({"domain": "design", "specifics": "Create 3 visual social media promo cards"})
-        return {"tasks": tasks}
+        tasks_to_dispatch = []
+        completed_work = state.get("completed_work", [])
+        failed_tasks = [w for w in completed_work if w.get("needs_revision", False)]
+        
+        if failed_tasks:
+            for w in failed_tasks:
+                tasks_to_dispatch.append({"domain": w["domain"], "specifics": w["task"]})
+        else:
+            requested = state["event_data"].get("requested_agents", ["marketing", "comms", "design"])
+            if "marketing" in requested: tasks_to_dispatch.extend([{"domain": "marketing", "specifics": "Twitter Thread"}, {"domain": "marketing", "specifics": "LinkedIn Post"}])
+            if "comms" in requested: tasks_to_dispatch.append({"domain": "comms", "specifics": "Draft Initial Welcome Invite (Email & WhatsApp)"})
+            if "design" in requested: tasks_to_dispatch.append({"domain": "design", "specifics": "Create 3 visual social media promo cards"})
+            
+        return {"tasks": tasks_to_dispatch}
 
     def assign_marketing_workers(state: SubgraphState):
         return [Send("creative_worker", {"task": t, "event_data": state["event_data"], "schedule": state.get("schedule", [])}) for t in state["tasks"]]
@@ -85,8 +93,6 @@ def build_marketing_subgraph(marketing, comms_agent, design_agent):
             return {"completed_work": [{"domain": domain, "task": specifics, "output": {"status": "ERROR", "error": str(e)}, "needs_revision": False}]}
 
     async def quality_control_critic(state: SubgraphState):
-        """🚀 ADVANCED: The Critic evaluates the work. If it's bad, it marks it for revision."""
-
         if not USE_CRITIC_AGENT:
             reviewed_work = state.get("completed_work", [])
             for work in reviewed_work:
@@ -99,22 +105,22 @@ def build_marketing_subgraph(marketing, comms_agent, design_agent):
                 reviewed_work.append(work)
                 continue
                 
-            # Simulate a fast LLM critique check
             critique = await critic_llm.ainvoke(f"Review this {work['domain']} output for quality. Output ONLY 'PASS' or 'FAIL'. Output: {work['output']}")
             if "FAIL" in critique.content:
                 print(f"[🔥 CRITIC] Rejecting {work['domain']} draft. Sending back for rewrite.")
                 work["task"] = f"REWRITE: {work['task']} (Make it more engaging)"
+                work["needs_revision"] = True 
+            else:
+                work["needs_revision"] = False
                 
-            work["needs_revision"] = False
             reviewed_work.append(work)
             
         return {"completed_work": reviewed_work}
     
     def route_critic(state: SubgraphState):
-        """Checks if any agent failed the critique. If yes, loop back to the worker!"""
         if any(w.get("needs_revision", False) for w in state.get("completed_work", [])):
-            return "creative_worker" # 🔄 LOOP BACK!
-        return END # ✅ ALL PASSED, FINISH SUBGRAPH!
+            return "marketing_supervisor"
+        return END
 
     graph.add_node("marketing_supervisor", marketing_supervisor)
     graph.add_node("creative_worker", creative_worker)
@@ -122,14 +128,13 @@ def build_marketing_subgraph(marketing, comms_agent, design_agent):
     
     graph.add_edge(START, "marketing_supervisor")
     graph.add_conditional_edges("marketing_supervisor", assign_marketing_workers, ["creative_worker"])
-    # Route workers to the critic instead of END
     graph.add_edge("creative_worker", "quality_control_critic")
-    graph.add_edge("quality_control_critic",route_critic, ["creative_worker", END])
+    graph.add_conditional_edges("quality_control_critic", route_critic, ["marketing_supervisor", END])
     
     return graph.compile()
 
 # ==========================================
-# 3. TEAM 2: OPERATIONS SUPERVISOR SUBGRAPH
+# 3. TEAM 2: OPERATIONS SUPERVISOR
 # ==========================================
 def build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, resource_agent):
     graph = StateGraph(SubgraphState)
@@ -177,7 +182,6 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
     async def run_planner(state: GraphState, runtime: Runtime[Context]) -> Command[Literal["scheduler"]]:
         event_data = state["event_data"]
         
-        # 🧠 LONG-TERM MEMORY INJECTION
         namespace = (runtime.context.user_id, "past_events")
         memories = await runtime.store.asearch(namespace, query=event_data.get('name', ''), limit=3)
         historical_context = "\n".join([m.value.get("event_summary", "") for m in memories]) if memories else ""
@@ -190,9 +194,9 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
 
         return Command(update={"plan": plan_list[0], "audit_log": ["Zero-shot plan generated."]}, goto="scheduler")
 
-    async def run_scheduler(state: GraphState) -> Command[Literal["chief_orchestrator"]]:
+    async def run_scheduler(state: GraphState):
         schedule = await scheduler.create_schedule(state["plan"])
-        return Command(update={"schedule": schedule}, goto="chief_orchestrator")
+        return {"schedule": schedule}
 
     # 🚀 Parallel Branching
     def chief_orchestrator(state: GraphState):
@@ -202,7 +206,6 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
         ]
 
     async def finalize_results(state: GraphState) -> Command[Literal["human_review"]]:
-        # 🚀 Because we used the `merge_work` reducer, `state["completed_work"]` is ALREADY beautifully deduplicated!
         latest_work = state.get("completed_work", [])
         
         outputs = {
@@ -213,18 +216,34 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
         }
         return Command(update={"agent_outputs": outputs}, goto="human_review")
 
-    def human_review(state: GraphState) -> Command[Literal["__end__", "updater_node", "planner", "chief_orchestrator"]]:
+    def human_review(state: GraphState) -> Command[Literal["__end__", "updater_node", "planner", "human_review"]]:
         feedback = interrupt("Review everything. Edit directly, chat to modify, or approve.")
         action = feedback.get("action", "prompt")
         
         if action == "approve": return Command(update={"audit_log": ["Approved all assets."]}, goto=END)
-        elif action == "direct_edit": return Command(update={"schedule": feedback.get("schedule", state["schedule"]), "agent_outputs": feedback.get("agent_outputs", state["agent_outputs"])}, goto="chief_orchestrator")
+        elif action == "direct_edit": 
+            return Command(update={"schedule": feedback.get("schedule", state["schedule"]), "agent_outputs": feedback.get("agent_outputs", state["agent_outputs"])}, goto="human_review")
         elif action == "prompt": return Command(update={"user_feedback": feedback.get("message", "")}, goto="updater_node")
         else: return Command(update={"event_data": {"user_constraints": feedback.get("message", "")}, "completed_work": []}, goto="planner")
 
     async def updater_node(state: GraphState) -> Command[Literal["human_review"]]:
         new_schedule, new_outputs = await updater_agent.process_update(instructions=state["user_feedback"], schedule=state.get("schedule"), outputs=state.get("agent_outputs"))
-        return Command(update={"schedule": new_schedule, "agent_outputs": new_outputs}, goto="chief_orchestrator")
+        return Command(update={"schedule": new_schedule, "agent_outputs": new_outputs}, goto="human_review")
+    
+    # ==========================================
+    # 🚀 STATE ISOLATION WRAPPERS
+    # ==========================================
+    marketing_compiled = build_marketing_subgraph(marketing, comms_agent, design_agent)
+    operations_compiled = build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, resource_agent)
+
+    async def marketing_team_node(state: dict):
+        # Runs the subgraph but ONLY returns the deduplicated completed_work
+        result = await marketing_compiled.ainvoke(state)
+        return {"completed_work": result.get("completed_work", [])}
+
+    async def operations_team_node(state: dict):
+        result = await operations_compiled.ainvoke(state)
+        return {"completed_work": result.get("completed_work", [])}
 
     # ==========================================
     # GRAPH ASSEMBLY
@@ -232,10 +251,14 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
     workflow.add_node("planner", run_planner)
     workflow.add_node("scheduler", run_scheduler)
     
-    workflow.add_node("marketing_team", build_marketing_subgraph(marketing, comms_agent, design_agent))
-    workflow.add_node("operations_team", build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, resource_agent))
+    # 🚀 ADD THE WRAPPER NODES INSTEAD OF THE RAW SUBGRAPHS
+    workflow.add_node("marketing_team", marketing_team_node)
+    workflow.add_node("operations_team", operations_team_node)
     
     workflow.add_edge(START, "planner")
+    workflow.add_edge("planner", "scheduler")
+    
+    # Router spawns the wrappers concurrently
     workflow.add_conditional_edges("scheduler", chief_orchestrator, ["marketing_team", "operations_team"])
     
     workflow.add_node("finalize", finalize_results)
