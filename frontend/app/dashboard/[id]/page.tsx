@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from 'react'
-import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Sparkles, LayoutTemplate, Briefcase } from 'lucide-react'
+import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Sparkles, LayoutTemplate, Briefcase, Bell, BellOff } from 'lucide-react'
 import Link from 'next/link'
 import { fetchHistory, fetchThreadState } from '../../../lib/api'
 
@@ -9,15 +9,16 @@ export default function Dashboard({ params }: { params: { id: string } }) {
   const [threads, setThreads] = useState<any[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
-  // Chat State
+  // Chat & Toggle State
   const [chatInput, setChatInput] = useState("")
+  const [autoNotify, setAutoNotify] = useState(false) // 🚀 Auto-WhatsApp Toggle
   const [messages, setMessages] = useState<{ role: string, content: string }[]>([
     { role: 'ai', content: 'Hello! I am your Event Intelligence Agent. How can we adjust the current plan?' }
   ])
 
   // Workspace State
   const [schedule, setSchedule] = useState<any[]>([])
-  const [outputs, setOutputs] = useState<any>({ marketing: [], comms: [], operations: [] }) // 🚀 FIXED: using "comms"
+  const [outputs, setOutputs] = useState<any>({ marketing: [], comms: [], operations: [] })
   const [status, setStatus] = useState("AWAITING_APPROVAL")
   const [isEditing, setIsEditing] = useState(false)
 
@@ -43,7 +44,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         .then(data => {
           if (data.schedule) setSchedule(data.schedule);
 
-          // 🚀 FIXED: Gracefully load comms and marketing
           if (data.agent_outputs) {
             setOutputs({
               marketing: data.agent_outputs.marketing || [],
@@ -69,28 +69,36 @@ export default function Dashboard({ params }: { params: { id: string } }) {
     setStatus("PROCESSING_UPDATE");
 
     try {
-      // 🚀 FIXED: Sends "prompt_text" which the Intent Router expects
       const res = await fetch('http://localhost:8000/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           thread_id: params.id,
-          prompt_text: userMessage
+          payload: {
+            action: "prompt",
+            message: userMessage,
+            auto_notify: autoNotify // 🚀 Tells backend to send WhatsApp immediately
+          }
         })
       });
       const data = await res.json();
 
       if (data.schedule) setSchedule(data.schedule);
 
-      if (data.marketing || data.comms) {
-        setOutputs(prev => ({
-          ...prev,
-          marketing: data.marketing || prev.marketing,
-          comms: data.comms || prev.comms
-        }));
-      }
+      const incomingOutputs = data.agent_outputs || data;
+      
+      setOutputs(prev => ({
+        ...prev,
+        marketing: incomingOutputs.marketing || prev.marketing,
+        comms: incomingOutputs.comms || incomingOutputs.emails || prev.comms,
+        operations: incomingOutputs.operations || prev.operations
+      }));
 
-      setMessages(prev => [...prev, { role: 'ai', content: data.status === "dispatched" ? "Communications dispatched successfully!" : "I've updated the workspace based on your request. Please review the changes on the right." }]);
+      const successMsg = autoNotify 
+        ? "Workspace updated and WhatsApp notifications have been automatically dispatched!"
+        : "I've updated the workspace based on your request. Please review the changes.";
+
+      setMessages(prev => [...prev, { role: 'ai', content: data.status === "dispatched" ? "Communications dispatched successfully!" : successMsg }]);
       setStatus(data.status === "dispatched" ? "COMPLETED" : "AWAITING_APPROVAL");
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', content: "Sorry, there was an error updating the event." }]);
@@ -105,7 +113,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
     setMessages(prev => [...prev, { role: 'user', content: "*(Saved manual edits to workspace)*" }]);
 
     try {
-      // 🚀 FIXED: Hits the proper manual edit endpoint
       await fetch('http://localhost:8000/api/edit/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,11 +140,13 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       });
       const data = await res.json();
 
-      if (data.marketing || data.email_outreach_logs) {
+      const incomingOutputs = data.agent_outputs || data;
+
+      if (incomingOutputs.marketing || incomingOutputs.email_outreach_logs || incomingOutputs.comms) {
         setOutputs(prev => ({
           ...prev,
-          marketing: data.marketing || prev.marketing,
-          comms: data.email_outreach_logs || prev.comms
+          marketing: incomingOutputs.marketing || prev.marketing,
+          comms: incomingOutputs.email_outreach_logs || incomingOutputs.comms || prev.comms
         }));
       }
 
@@ -223,13 +232,28 @@ export default function Dashboard({ params }: { params: { id: string } }) {
           )}
         </div>
 
-        {/* Chat Input */}
-        <div className="p-4 bg-white border-t border-slate-100">
+        {/* 🚀 UPGRADED: Chat Input with Auto-Notify Toggle */}
+        <div className="p-4 bg-white border-t border-slate-100 flex flex-col gap-3">
+          <div className="flex items-center justify-end px-2">
+            <button 
+              type="button"
+              onClick={() => setAutoNotify(!autoNotify)}
+              className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full transition-all ${
+                autoNotify 
+                  ? 'bg-green-100 text-green-700 border border-green-200' 
+                  : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'
+              }`}
+            >
+              {autoNotify ? <Bell size={12} className="animate-pulse" /> : <BellOff size={12} />}
+              {autoNotify ? "Auto-WhatsApp ON" : "Auto-WhatsApp OFF"}
+            </button>
+          </div>
+
           <form onSubmit={handleChat} className="flex items-center gap-3 bg-slate-50 border border-slate-200 p-2 rounded-2xl focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
             <input
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              placeholder="e.g., Send the emails or Delay event by 2 hours..."
+              placeholder={autoNotify ? "e.g., Delay keynote by 1hr (Will auto-send!)" : "e.g., Delay keynote, or send custom broadcast..."}
               className="flex-1 bg-transparent px-3 outline-none text-sm text-slate-800 placeholder:text-slate-400"
               disabled={status === "PROCESSING_UPDATE" || isEditing}
             />
@@ -294,7 +318,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
             </div>
           </section>
 
-          {/* 🚀 FIXED: OMNICHANNEL COMMS PANEL */}
+          {/* 🚀 COMMUNICATION HUB (Displays the CommsAgent Drafts) */}
           <section>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2"><Mail size={14} /> Communication Hub</h3>
@@ -343,7 +367,8 @@ export default function Dashboard({ params }: { params: { id: string } }) {
               ))}
             </div>
           </section>
-          {/* OPERATIONS & LOGISTICS PANEL (Budget, Volunteer, Sponsor, Resource) */}
+
+          {/* OPERATIONS & LOGISTICS PANEL (Budget formatting safe) */}
           <section className="mt-8">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
@@ -359,13 +384,15 @@ export default function Dashboard({ params }: { params: { id: string } }) {
               )}
 
               {outputs.operations?.map((item: any, i: number) => {
-                // Safely handle both JSON objects and plain text strings
                 const isObject = typeof item.output === 'object' && item.output !== null;
+                const isBudget = item.domain === 'budget' && isObject && item.output.total_calculated_cost !== undefined;
 
                 return (
                   <div key={i} className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-4">
-                      <span className="text-[10px] font-extrabold text-amber-700 bg-amber-100 px-3 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
+                      <span className={`text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-widest shadow-sm ${
+                        isBudget ? 'text-emerald-700 bg-emerald-100' : 'text-amber-700 bg-amber-100'
+                      }`}>
                         {item.domain || "Operation"}
                       </span>
                       <span className="text-xs font-bold text-slate-400 max-w-[60%] truncate text-right" title={item.task}>
@@ -373,8 +400,31 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                       </span>
                     </div>
 
-                    <div className="flex-1 bg-slate-50/50 rounded-xl p-4 border border-slate-100 overflow-y-auto max-h-[250px]">
-                      {isObject ? (
+                    <div className="flex-1 bg-slate-50/50 rounded-xl p-4 border border-slate-100 overflow-y-auto max-h-[350px]">
+                      {isBudget ? (
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-200 shadow-sm">
+                            <span className="font-bold text-sm">Total Est. Cost</span>
+                            <span className="font-mono font-black text-xl flex items-center gap-1">
+                              {item.output.currency || "$"} {Number(item.output.total_calculated_cost || 0).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="space-y-2">
+                            {item.output.line_items?.map((li: any, idx: number) => (
+                              <div key={idx} className="flex flex-col gap-1 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex justify-between items-center">
+                                  <p className="font-bold text-slate-700 text-sm">{li.category || "Item"}</p>
+                                  <span className="font-mono text-slate-600 font-semibold text-sm">
+                                    {Number(li.cost || 0).toLocaleString()}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-400 italic leading-relaxed">{li.notes || "No notes provided."}</p>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-slate-400 text-right italic pt-2">Location Indexed: {item.output.pricing_location || "Unknown"}</p>
+                        </div>
+                      ) : isObject ? (
                         <pre className="text-[11px] text-slate-600 font-mono whitespace-pre-wrap leading-relaxed">
                           {JSON.stringify(item.output, null, 2)}
                         </pre>

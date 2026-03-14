@@ -84,7 +84,7 @@ def build_marketing_subgraph(marketing, comms_agent, design_agent):
         async def run_agent():
             if domain == "marketing": return await marketing.generate_campaign(state["event_data"], specifics)
             elif domain == "comms": return await comms_agent.draft_communications(state["event_data"], state["schedule"], specifics)
-            elif domain == "design": return await design_agent.generate_cards(state["event_data"], specifics)
+            elif domain == "design": return await design_agent.generate_cards(state["event_data"],state.get("schedule", []), specifics)
 
         try:
             result = await asyncio.wait_for(run_agent(), timeout=45.0)

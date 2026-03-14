@@ -1,94 +1,147 @@
-from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
-from config import OLLAMA_BASE_URL, OPENAI_API_KEY, CLOUD_MODEL
-from tools.system_tools import swarm_tools
-from langchain_core.utils.json import parse_json_markdown
 import json
 import asyncio
 import re
-from config import get_resilient_llm
+from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import create_react_agent
+from langchain_core.utils.json import parse_json_markdown
+
+from config import OLLAMA_BASE_URL, OPENAI_API_KEY, CLOUD_MODEL, get_resilient_llm
+from tools.system_tools import swarm_tools
 
 class PlannerAgent:
     def __init__(self):
         self.llm = get_resilient_llm(temperature=0.4)
-        
-        # This wrapper gives Llama 3.1 the ability to Web Scrape!
+        # ReAct agent with tools
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
 
+    # ============================================
+    # SINGLE BRANCH
+    # ============================================
     async def _generate_single_branch(self, prompt, i):
         try:
-            # 1. Trigger the ReAct Cognitive Loop
             response = await self.agent_executor.ainvoke({"messages": [("user", prompt)]})
             final_text = response["messages"][-1].content
-            
-            # 2. BULLETPROOF JSON EXTRACTOR
-            # Clean markdown code blocks if the LLM wrapped the output
+
+            # ---------- CLEAN JSON ----------
             clean_text = final_text.replace("```json", "").replace("```", "").strip()
-            
-            # Extract everything from the first '{' to the last '}'
-            match = re.search(r'\{.*\}', clean_text, re.DOTALL)
-            
+            match = re.search(r"\{.*\}", clean_text, re.DOTALL)
+
             if not match:
-                raise ValueError("No JSON object found in LLM response.")
-                
-            clean_json_string = match.group(0)
-            
-            # strict=False allows unescaped control characters (like newlines) inside strings
-            plan_data = parse_json_markdown(final_text)
-            plan_data["content"] = str(plan_data) 
+                raise ValueError("No JSON found")
+
+            json_text = match.group(0)
+            plan_data = parse_json_markdown(json_text)
+            plan_data["content"] = str(plan_data)
             return plan_data
-            
+
         except Exception as e:
-            print(f"Agent/Tool Error on branch {i}: {e}")
+            print(f"Planner Error branch {i}: {e}")
             return {
-                "plan_overview": f"Emergency Contingency Plan Option {i+1}. The AI failed to output strictly valid JSON.",
+                "plan_overview": f"Fallback Plan {i+1}",
+                "duration": "1 day",
                 "sessions": [
-                    {"name": "Emergency Core Phase", "day": 1, "start_time": "10:00 AM", "end_time": "02:00 PM", "requires_main_stage": False}
+                    {
+                        "name": "Emergency Core Phase",
+                        "requires_main_stage": False
+                    }
                 ],
-                "content": "Emergency Fallback"
+                "content": "Fallback"
             }
 
-    async def generate_multiple_plans(self, event_data, count=1): 
-        event_name = event_data.get('name', 'Event')
-        crowd = event_data.get('expected_crowd', 100)
+    # ============================================
+    # MULTIPLE PLANS
+    # ============================================
+    async def generate_multiple_plans(self, event_data, count=1):
+        event_name = event_data.get("name", "Event")
+        crowd = event_data.get("expected_crowd", 100)
         history = event_data.get("historical_context", "No past data.")
         rl_strategy = event_data.get("learned_strategy", "Prioritize balanced scheduling.")
         user_constraints = event_data.get("user_constraints", "None")
-        
+        event_type = event_data.get("event_type", "general")
+
         tasks = []
+
         for i in range(count):
             prompt = f"""
-            You are an elite, highly adaptable event architect planning '{event_name}' for {crowd} people.
-            
-            🔥 MANDATORY TOOL PROTOCOL:
-            You MUST use the 'web_search' tool right now to search the internet for context about "{event_name}" or its underlying theme.
-            DO NOT generate the schedule until you have read the web search results.
-            
-            🔥 CRITICAL USER CONSTRAINTS (OBEY STRICTLY):
-            {user_constraints}
-            
-            🧠 SWARM INTELLIGENCE & PAST MEMORY:
-            - Past memory: {history}
-            - RL Policy Suggestion: {rl_strategy}
-            
-            Design a highly realistic schedule that PERFECTLY adapts to the user's specific constraints and your web research.
-            
-            DYNAMIC SCHEDULING RULES & FALLBACK PROTOCOLS:
-            1. DURATION: Analyze the constraints to determine the exact length of the event. 
-               -> ⚠️ FALLBACK: If constraints are vague, default to standard times (e.g., 24-48 hours for a 'hackathon', 1-day for a conference).
-            2. BREAKS: Add logical human breaks (lunch, sleep, networking) ONLY IF they make sense for the duration.
-            3. FLEXIBILITY: Generate as many (or as few) sessions as necessary to fulfill the prompt.
-            
-            Respond ONLY in valid JSON format exactly like this structure:
-            CRITICAL RULE: Escape all double quotes inside your text values using a backslash (e.g., \\"). 
-            {{
-                "plan_overview": "Explain your logic. Include what you learned from the web search.",
-                "sessions": [
-                    {{"name": "Opening Brief", "day": 1, "start_time": "09:00 AM", "end_time": "09:30 AM", "requires_main_stage": true}}
-                ]
-            }}
+                You are an ELITE GLOBAL EVENT ARCHITECT AI.
+
+                You design world-class, immersive, modern events using real internet trends,
+                real audience psychology, and real event formats.
+
+                Event name: "{event_name}"
+                Expected crowd: {crowd}
+                EVENT TYPE: {event_type}
+
+                ===============================
+                🔥 MANDATORY WEB INTELLIGENCE
+                ===============================
+                You MUST use the web_search tool BEFORE generating sessions.
+                Search queries should include: 
+                "{event_name} event format"
+                "{event_name} interactive ideas"
+                "modern event engagement ideas"
+
+                You MUST analyze the search results. DO NOT generate sessions until web search is done.
+
+                ===============================
+                🔥 USER CONSTRAINTS (STRICT)
+                ===============================
+                {user_constraints}
+
+                ===============================
+                🧠 SWARM MEMORY
+                ===============================
+                Past events: {history}
+                RL Strategy: {rl_strategy}
+
+                ===============================
+                ⏱ DURATION EXTRACTION & AWARENESS
+                ===============================
+                Analyze the USER CONSTRAINTS above. Extract the intended duration (e.g., "3 days", "24 hours", "1 week").
+                If the user does not specify a duration, default to "1 day".
+                
+                CRITICAL: You MUST generate enough sessions to fill the entire duration you extracted! 
+                If the event is 3 days, you must generate enough distinct, interactive sessions to fill 3 whole days.
+
+                ===============================
+                🎯 DESIGN GOAL & NAMING RULES
+                ===============================
+                Create the most engaging, modern, non-boring event possible.
+                
+                DO NOT USE GENERIC NAMES: "Opening speech", "Keynote", "Lunch", "Break", "Session 1", "Hackathon", "Workshop".
+                Every single name must be thematic, immersive, and interactive!
+
+                Examples:
+                Lunch → Neural Networking Banquet
+                Break → Quantum Recharge Interval
+                Talk → Fireside Chat: Future of AGI
+                Workshop → Interactive Lab: Autonomous Agents
+                Panel → Roundtable: AI Ethics War Room
+
+                Use modern formats: lightning talks, live coding battles, speed mentoring, interactive labs, etc.
+
+                ===============================
+                📦 OUTPUT FORMAT (STRICT JSON)
+                ===============================
+                Escape quotes using \\"
+                Return ONLY JSON. DO NOT create times. Only generate sessions.
+
+                {{
+                    "plan_overview": "Explain creative logic, trends from web search, and why this event will be engaging.",
+                    "duration": "3 days", 
+                    "sessions": [
+                        {{
+                            "name": "Ignition Sequence: Welcome Protocol",
+                            "requires_main_stage": true
+                        }},
+                        {{
+                            "name": "Interactive Lab: Building Autonomous Swarms",
+                            "requires_main_stage": false
+                        }}
+                    ]
+                }}
             """
             tasks.append(self._generate_single_branch(prompt, i))
-            
+
         plans = await asyncio.gather(*tasks)
         return list(plans)

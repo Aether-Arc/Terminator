@@ -1,9 +1,9 @@
 import json
 from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent # 🚀 Required for Web Search abilities
+from langgraph.prebuilt import create_react_agent 
 from langchain_core.utils.json import parse_json_markdown
 from config import CLOUD_MODEL, OLLAMA_BASE_URL, OPENAI_API_KEY
-from tools.system_tools import swarm_tools # 🚀 Import your tools!
+from tools.system_tools import swarm_tools 
 from config import get_resilient_llm
 from pydantic import BaseModel, Field
 from typing import List
@@ -21,13 +21,13 @@ class DesignOutput(BaseModel):
 
 class DesignAgent:
     def __init__(self):
-        # Temperature 0.5 allows for creative gradients and punchy copywriting
         self.llm = get_resilient_llm(temperature=0.5)
-        # 🚀 THE UPGRADE: We bind the web search tools so the agent can browse the internet!
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
+        # 🚀 Use Structured Output to absolutely guarantee an Array of objects
         self.formatter_llm = get_resilient_llm(temperature=0).with_structured_output(DesignOutput)
 
-    async def generate_cards(self, event_data, specifics):
+    # 🚀 Add schedule to the function arguments
+    async def generate_cards(self, event_data, schedule, specifics):
         """
         Generates structured JSON representing Social Media Cards (Generative UI).
         """
@@ -38,6 +38,7 @@ class DesignAgent:
         prompt = f"""
         You are an elite Art Director and UI/UX Designer.
         Event Context: {json.dumps(event_data)}
+        Event Schedule: {json.dumps(schedule)}
         Task: {specifics}
 
         🔥 MANDATORY RESEARCH PROTOCOL:
@@ -45,36 +46,30 @@ class DesignAgent:
         2. Incorporate these real-world trends into your design concepts.
 
         🔥 DESIGN PROTOCOL:
-        Design a series of 3 highly engaging "Social Media Cards" for this event.
-        Think in terms of visuals: A "T-Minus" hype card, a "Schedule Sneak Peek", and a "Keynote Spotlight".
+        Design a series of 3 highly engaging "Social Media Cards" based directly on the Schedule provided.
+        Think in terms of visuals: A "T-Minus" hype card, a "Schedule Sneak Peek" highlighting an exciting session from the schedule, and a "Keynote Spotlight".
 
         Return ONLY a valid JSON array of objects. 
         CRITICAL: We use a CLEAN, ELEGANT LIGHT THEME. Choose beautiful, modern, soft Tailwind gradients for the 'gradient' field. 
         Good examples: "from-blue-50 to-indigo-100", "from-slate-50 to-slate-200", "from-rose-50 to-orange-50", "from-emerald-50 to-teal-100".
         DO NOT use dark gradients like from-slate-900.
-        
-        Format exactly like this:
-        [
-            {{
-                "type": "Countdown",
-                "title": "⏳ 3 Days Left!",
-                "subtitle": "Get Ready for {event_name}",
-                "body": "The biggest tech summit is almost here. Secure your spot now.",
-                "gradient": "from-indigo-50 to-blue-100",
-                "platform": "Instagram / LinkedIn"
-            }}
-        ]
         """
         
         try:
             print(f"[*] DesignAgent: Browsing the web for design inspiration for {event_name}...")
-            # 🚀 Use the agent_executor to trigger the internet search loop
-            res = await self.agent_executor.ainvoke({"messages": [("user", prompt)]})
             
-            # The bulletproof parser extracts the JSON safely from the final LLM message
-            final_text = res["messages"][-1].content
-            cards = parse_json_markdown(final_text)
-            return cards
+            # 1. Let the ReAct agent do the internet searching and reasoning
+            res = await self.agent_executor.ainvoke({"messages": [("user", prompt)]})
+            raw_content = res["messages"][-1].content
+            
+            # 2. 🚀 Force the unstructured text through your Pydantic Formatter
+            print(f"[*] DesignAgent: Formatting final output into strict UI schema...")
+            formatted_result = await self.formatter_llm.ainvoke(
+                f"Extract the 3 design cards from the following text and format them strictly according to the schema:\n\n{raw_content}"
+            )
+            
+            # 3. Dump the Pydantic models back into the pure list of dictionaries the frontend expects
+            return [card.model_dump() for card in formatted_result.cards]
             
         except Exception as e:
             print(f"[*] DesignAgent Error: {e}")

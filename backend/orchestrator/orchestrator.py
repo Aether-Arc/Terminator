@@ -25,7 +25,7 @@ from langchain_openai import ChatOpenAI
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, CLOUD_MODEL
 from langgraph.types import Command 
 
-# 🚀 IMPORT YOUR REAL-WORLD SERVICES HERE
+# IMPORT YOUR REAL-WORLD SERVICES HERE
 from services.whatsapp_service import send_whatsapp_blast
 
 class EventOrchestrator:
@@ -68,11 +68,16 @@ class EventOrchestrator:
         print(f"[*] Orchestrator received event data: {event_data.get('name')}")
         raw_name = event_data.get("name", "Unnamed Event")
         short_hash = str(uuid.uuid4())[:4]
-        self.thread_id = f"{raw_name} [{short_hash}]"
-        await streamer.broadcast("Orchestrator", "Initializing Fast Zero-Shot Swarm Sequence...", "thinking")
-        if not thread_id: thread_id = f"evt_{str(uuid.uuid4())[:8]}"
         
+        # Unify thread ID
+        if not thread_id: 
+            thread_id = f"{raw_name} [{short_hash}]"
+            
+        self.thread_id = thread_id
         self.thread_config = {"configurable": {"thread_id": self.thread_id}}
+        
+        await streamer.broadcast("Orchestrator", "Initializing Fast Zero-Shot Swarm Sequence...", "thinking")
+        
         raw_csv = event_data.get("csv_content", "")
         if raw_csv:
             await streamer.broadcast("Orchestrator", "Parsing messy CSV participant data...", "simulating")
@@ -95,7 +100,7 @@ class EventOrchestrator:
         agent_outputs = final_state.values.get("agent_outputs", {})
         
         return {
-            "thread_id": thread_id,
+            "thread_id": self.thread_id,
             "workflow_executed": True,
             "selected_plan": final_state.values.get("plan"),
             "schedule": final_state.values.get("schedule"),
@@ -104,10 +109,6 @@ class EventOrchestrator:
             "agent_outputs": agent_outputs
         }
 
-    # ====================================================================
-    # 🚀 NEW: THE UNIVERSAL GRAPH RESUMER 
-    # (Replaces manual_override, approve_plan, conversational_micro_edit)
-    # ====================================================================
     async def resume_workflow(self, thread_id, payload, streamer):
         """Passes ANY payload (approve, direct_edit, or prompt) back into the paused LangGraph node."""
         self.thread_config = {"configurable": {"thread_id": thread_id}}
@@ -120,7 +121,7 @@ class EventOrchestrator:
         else:
             await streamer.broadcast("Orchestrator", "Activating Intelligence Swarm...", "thinking")
 
-        # Stream the execution so the React UI Terminal gets live updates!
+        # Stream the execution so the React UI Terminal gets live updates
         async for chunk in self.graph.astream(Command(resume=payload), config=self.thread_config, stream_mode="updates", version="v2", context=self.user_context):
             if chunk["type"] == "updates":
                 for node_name, state_update in chunk["data"].items():
@@ -135,16 +136,20 @@ class EventOrchestrator:
             "audit_log": final_state.values.get("audit_log", [])
         }
 
-    async def route_user_intent(self, thread_id, user_prompt, streamer):
-        """🚀 THE BRAIN: Categorizes if we are editing the plan OR sending live messages."""
+    # 🚀 UPGRADED BRAIN: Handles Auto-Notify and Custom Broadcasts
+    async def route_user_intent(self, thread_id, payload, streamer):
+        user_prompt = payload.get("message", "")
+        auto_notify = payload.get("auto_notify", False)
+        
         await streamer.broadcast("Orchestrator", "Analyzing command intent...", "thinking")
         
         routing_prompt = f"""
         Analyze this event management request: "{user_prompt}"
         Categorize it into exactly one of these:
-        1. SEND_ACTION: User wants to physically send/dispatch emails, WhatsApps, or post content that was already drafted.
-        2. CANCELLATION: User wants to cancel the event entirely.
-        3. GRAPH_UPDATE: User wants to change times, edit text, add sessions, or modify the event plan.
+        1. DIRECT_BROADCAST: User explicitly wants to send a custom message right now (e.g., "send this to all whatsapp numbers: Welcome everyone!").
+        2. SEND_ACTION: User wants to dispatch currently drafted communications.
+        3. CANCELLATION: User wants to cancel the event entirely.
+        4. GRAPH_UPDATE: User wants to change times, edit text, add sessions, or modify the event plan.
 
         Return ONLY the category name.
         """
@@ -152,15 +157,67 @@ class EventOrchestrator:
         response = await self.llm.ainvoke(routing_prompt)
         intent = response.content.strip().upper()
 
-        if "SEND_ACTION" in intent:
+        if "DIRECT_BROADCAST" in intent:
+            await streamer.broadcast("Orchestrator", "Direct broadcast detected. Preparing Twilio...", "simulating")
+            
+            # Clean the user's prompt to extract just the message
+            clean_message = user_prompt.lower().replace("send this to all the whatsapp numbers", "").replace("send this to all whatsapp numbers", "").strip(" :,-")
+            
+            custom_draft = {
+                "task": "Custom Broadcast",
+                "output": {
+                    "use_whatsapp": True,
+                    "whatsapp_body": clean_message.capitalize(),
+                    "status": "DRAFTED"
+                }
+            }
+            self.thread_config = {"configurable": {"thread_id": thread_id}}
+            state = self.graph.get_state(self.thread_config)
+            agent_outputs = state.values.get("agent_outputs", {})
+            comms = agent_outputs.get("comms", [])
+            comms.append(custom_draft)
+            agent_outputs["comms"] = comms
+            self.graph.update_state(self.thread_config, {"agent_outputs": agent_outputs})
+            
             return await self.dispatch_outputs(thread_id, streamer)
+
+        elif "SEND_ACTION" in intent:
+            return await self.dispatch_outputs(thread_id, streamer)
+            
         elif "CANCELLATION" in intent:
             await streamer.broadcast("Orchestrator", "Initiating Cancellation Protocol...", "error")
             cancelled_schedule = [{"time": "N/A", "session": "EVENT CANCELLED"}]
             return await self.resume_workflow(thread_id, {"action": "direct_edit", "schedule": cancelled_schedule}, streamer)
+            
         else:
-            # Let LangGraph's human_review node route it to the UpdaterAgent!
-            return await self.resume_workflow(thread_id, {"action": "prompt", "message": user_prompt}, streamer)
+            # 1. Update the graph (schedule, budget, etc.) normally
+            result = await self.resume_workflow(thread_id, {"action": "prompt", "message": user_prompt}, streamer)
+            
+            # 2. AUTO-NOTIFY LOGIC (If toggle is ON in frontend)
+            if auto_notify:
+                await streamer.broadcast("Orchestrator", "Auto-Notify ON. Drafting schedule change notice...", "simulating")
+                
+                alert_task = f"URGENT SCHEDULE UPDATE: {user_prompt}. Draft a very short WhatsApp message highlighting what was changed or delayed."
+                self.thread_config = {"configurable": {"thread_id": thread_id}}
+                state = self.graph.get_state(self.thread_config)
+                
+                new_draft = await self.comms.draft_communications(
+                    state.values.get("event_data", {}), 
+                    result.get("schedule", []), 
+                    alert_task
+                )
+                
+                # Append to state
+                agent_outputs = result.get("agent_outputs", {})
+                comms = agent_outputs.get("comms", [])
+                comms.append({"task": "Auto-Notify: Schedule Change", "output": new_draft})
+                agent_outputs["comms"] = comms
+                self.graph.update_state(self.thread_config, {"agent_outputs": agent_outputs})
+                
+                # Immediately dispatch
+                await self.dispatch_outputs(thread_id, streamer)
+                
+            return result
 
     async def dispatch_outputs(self, thread_id, streamer):
         """Action: Physically sends the emails/whatsapps and updates state to SENT."""
