@@ -58,6 +58,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
   }, [params.id])
 
   // Handles Chat Submission
+  // Handles Chat Submission
   const handleChat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
@@ -77,12 +78,20 @@ export default function Dashboard({ params }: { params: { id: string } }) {
           payload: {
             action: "prompt",
             message: userMessage,
-            auto_notify: autoNotify // 🚀 Tells backend to send WhatsApp immediately
+            auto_notify: autoNotify 
           }
         })
       });
       const data = await res.json();
 
+      // 🚀 CRITICAL FIX: If the backend rejects the request, show the real error message!
+      if (data.status === "error") {
+        setMessages(prev => [...prev, { role: 'ai', content: data.message }]);
+        setStatus("AWAITING_APPROVAL");
+        return; // Stop execution
+      }
+
+      // Proceed normally if successful
       if (data.schedule) setSchedule(data.schedule);
 
       const incomingOutputs = data.agent_outputs || data;
@@ -101,7 +110,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       setMessages(prev => [...prev, { role: 'ai', content: data.status === "dispatched" ? "Communications dispatched successfully!" : successMsg }]);
       setStatus(data.status === "dispatched" ? "COMPLETED" : "AWAITING_APPROVAL");
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'ai', content: "Sorry, there was an error updating the event." }]);
+      setMessages(prev => [...prev, { role: 'ai', content: "Sorry, there was an error communicating with the swarm." }]);
       setStatus("AWAITING_APPROVAL");
     }
   }

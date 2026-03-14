@@ -116,6 +116,50 @@ class EventOrchestrator:
         self.thread_config = {"configurable": {"thread_id": thread_id}}
         action = payload.get("action", "prompt")
         
+        current_state = self.graph.get_state(self.thread_config)
+        
+        # ==========================================
+        # 🚀 DEFIBRILLATOR: OVERRIDE FOR DEAD GRAPHS
+        # ==========================================
+        if not current_state.next:
+            if action == "prompt":
+                await streamer.broadcast("Orchestrator", "Event is finalized. Activating manual override...", "warning")
+                
+                user_msg = payload.get("message", "")
+                old_schedule = current_state.values.get("schedule", [])
+                old_outputs = current_state.values.get("agent_outputs", {})
+                
+                # 1. Run the Updater Agent manually (Bypassing the frozen graph)
+                new_schedule, new_outputs = await self.updater_agent.process_update(user_msg, old_schedule, old_outputs)
+                
+                # 2. Forcefully save it into the closed SQLite database!
+                self.graph.update_state(self.thread_config, {"schedule": new_schedule, "agent_outputs": new_outputs})
+                
+                await streamer.broadcast("Orchestrator", "Manual override successful.", "success")
+                return {
+                    "schedule": new_schedule, 
+                    "agent_outputs": new_outputs, 
+                    "audit_log": current_state.values.get("audit_log", [])
+                }
+                
+            elif action == "direct_edit":
+                # Allows the "Edit Manually" UI button to work on old events
+                await streamer.broadcast("Orchestrator", "Saving manual edits to locked event...", "warning")
+                new_schedule = payload.get("schedule", current_state.values.get("schedule", []))
+                self.graph.update_state(self.thread_config, {"schedule": new_schedule})
+                await streamer.broadcast("Orchestrator", "Edits saved.", "success")
+                
+                return {
+                    "schedule": new_schedule, 
+                    "agent_outputs": current_state.values.get("agent_outputs", {}),
+                    "audit_log": current_state.values.get("audit_log", [])
+                }
+            else:
+                return {"status": "error", "message": "⚠️ This event is completely locked. You can only update the schedule."}
+
+        # ==========================================
+        # STANDARD ROUTING (FOR ACTIVE GRAPHS)
+        # ==========================================
         if action == "approve":
             await streamer.broadcast("Orchestrator", "Plan approved. Finalizing assets...", "success")
         elif action == "direct_edit":
@@ -137,32 +181,28 @@ class EventOrchestrator:
             "agent_outputs": final_state.values.get("agent_outputs", {}),
             "audit_log": final_state.values.get("audit_log", [])
         }
-
+    
     # 🚀 UPGRADED BRAIN: Handles Auto-Notify and Custom Broadcasts
+    # 🚀 UPGRADED BRAIN: Handles Auto-Notify and Custom Broadcasts safely
     async def route_user_intent(self, thread_id, payload, streamer):
         user_prompt = payload.get("message", "")
         auto_notify = payload.get("auto_notify", False)
         
         await streamer.broadcast("Orchestrator", "Analyzing command intent...", "thinking")
         
-        routing_prompt = f"""
-        Analyze this event management request: "{user_prompt}"
-        Categorize it into exactly one of these:
-        1. DIRECT_BROADCAST: User explicitly wants to send a custom message right now (e.g., "send this to all whatsapp numbers: Welcome everyone!").
-        2. SEND_ACTION: User wants to dispatch currently drafted communications.
-        3. CANCELLATION: User wants to cancel the event entirely.
-        4. GRAPH_UPDATE: User wants to change times, edit text, add sessions, or modify the event plan.
+        # 🚀 FIX: Removed the dangerous "cancel" trap! 
+        # All schedule modifications (even single session deletions) now route safely to the UpdaterAgent.
+        prompt_lower = user_prompt.lower()
+        if "send" in prompt_lower and "whatsapp" in prompt_lower:
+            intent = "DIRECT_BROADCAST"
+        elif "dispatch" in prompt_lower or "send all" in prompt_lower:
+            intent = "SEND_ACTION"
+        else:
+            intent = "GRAPH_UPDATE"
 
-        Return ONLY the category name.
-        """
-        
-        response = await self.llm.ainvoke(routing_prompt)
-        intent = response.content.strip().upper()
-
-        if "DIRECT_BROADCAST" in intent:
+        if intent == "DIRECT_BROADCAST":
             await streamer.broadcast("Orchestrator", "Direct broadcast detected. Preparing Twilio...", "simulating")
             
-            # Clean the user's prompt to extract just the message
             clean_message = user_prompt.lower().replace("send this to all the whatsapp numbers", "").replace("send this to all whatsapp numbers", "").strip(" :,-")
             
             custom_draft = {
@@ -183,16 +223,11 @@ class EventOrchestrator:
             
             return await self.dispatch_outputs(thread_id, streamer)
 
-        elif "SEND_ACTION" in intent:
+        elif intent == "SEND_ACTION":
             return await self.dispatch_outputs(thread_id, streamer)
             
-        elif "CANCELLATION" in intent:
-            await streamer.broadcast("Orchestrator", "Initiating Cancellation Protocol...", "error")
-            cancelled_schedule = [{"time": "N/A", "session": "EVENT CANCELLED"}]
-            return await self.resume_workflow(thread_id, {"action": "direct_edit", "schedule": cancelled_schedule}, streamer)
-            
         else:
-            # 1. Update the graph (schedule, budget, etc.) normally
+            # 1. Update the graph (The AI Updater will safely delete the single session and fix the times)
             result = await self.resume_workflow(thread_id, {"action": "prompt", "message": user_prompt}, streamer)
             
             # 2. AUTO-NOTIFY LOGIC (If toggle is ON in frontend)
