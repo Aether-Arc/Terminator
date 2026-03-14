@@ -120,5 +120,127 @@
       "time": "7:00 PM - 8:30 PM",
       "status": "Closing Ceremony and Prize Distribution"
     }
+  ],
+  [
+    {
+      "session": "Day 1",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "Tech Quiz Competition"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Morning Refresh Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:50 AM - 1:00 PM",
+      "status": "Guest Lecture: Emerging Tech Trends"
+    },
+    {
+      "session": "Day 1",
+      "time": "1:00 PM - 2:00 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 1",
+      "time": "2:00 PM - 4:00 PM",
+      "status": "Gaming Tournament"
+    },
+    {
+      "session": "Day 1",
+      "time": "4:00 PM - 4:30 PM",
+      "status": "Tea Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "4:30 PM - 6:30 PM",
+      "status": "Cultural Dance Performance"
+    },
+    {
+      "session": "Day 1",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Comedy Night"
+    },
+    {
+      "session": "Day 2",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "Hackathon"
+    },
+    {
+      "session": "Day 2",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Recharge Break"
+    },
+    {
+      "session": "Day 2",
+      "time": "10:50 AM - 1:00 PM",
+      "status": "Workshop: AI and Machine Learning"
+    },
+    {
+      "session": "Day 2",
+      "time": "1:00 PM - 2:00 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 2",
+      "time": "2:00 PM - 4:00 PM",
+      "status": "Social Impact Panel Discussion"
+    },
+    {
+      "session": "Day 2",
+      "time": "4:00 PM - 4:30 PM",
+      "status": "Evening Chill Break"
+    },
+    {
+      "session": "Day 2",
+      "time": "4:30 PM - 6:30 PM",
+      "status": "Music Competition"
+    },
+    {
+      "session": "Day 2",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Dinner and Networking"
+    },
+    {
+      "session": "Day 3",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "Technical Paper Presentation"
+    },
+    {
+      "session": "Day 3",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Morning Connect Break"
+    },
+    {
+      "session": "Day 3",
+      "time": "10:50 AM - 1:00 PM",
+      "status": "Innovative Project Showcase"
+    },
+    {
+      "session": "Day 3",
+      "time": "1:00 PM - 2:00 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 3",
+      "time": "2:00 PM - 4:00 PM",
+      "status": "Cultural Fashion Show"
+    },
+    {
+      "session": "Day 3",
+      "time": "4:00 PM - 4:30 PM",
+      "status": "Tea Break"
+    },
+    {
+      "session": "Day 3",
+      "time": "4:30 PM - 6:30 PM",
+      "status": "Awards and Recognition Ceremony"
+    },
+    {
+      "session": "Day 3",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Closing Ceremony and Farewell"
+    }
   ]
 ]

@@ -320,10 +320,44 @@ export default function Dashboard({ params }: { params: { id: string } }) {
               {(() => {
                 const grouped: Record<string, any[]> = {};
                 schedule.forEach((item, index) => {
-                  const [dayPart, timePart] = (item.time || "Day 1 | TBD").split(" | ");
-                  const day = dayPart?.trim() || "Day 1";
+                  let day = "Day 1";
+                  let timeOnly = item.time || "TBD";
+                  let sessionName = item.session || "Event Session";
+
+                  // 🚀 FIX: Detect if the AI put the Day in "session" and the Event Name in "status"
+                  const isSessionJustDay = /^Day\s*\d+$/i.test((item.session || "").trim());
+                  
+                  if (isSessionJustDay && item.status && item.status !== "Locked" && item.status !== "Pending") {
+                    day = item.session.trim();
+                    sessionName = item.status.trim();
+                    timeOnly = item.time?.trim() || "TBD";
+                  }
+                  // Standard format: "Day 1 | 10:00 AM" in the time field
+                  else if (item.time && item.time.includes("|")) {
+                    const parts = item.time.split("|");
+                    const dayPartIndex = parts.findIndex(p => p.toLowerCase().includes("day"));
+                    
+                    if (dayPartIndex !== -1) {
+                      day = parts[dayPartIndex].trim();
+                      timeOnly = parts.filter((_, idx) => idx !== dayPartIndex).join("|").trim();
+                    } else {
+                      day = parts[0].trim();
+                      timeOnly = parts.slice(1).join("|").trim();
+                    }
+                  } 
+                  // Fallback: If AI puts "Day 1 - Session Name" in the session field
+                  else if (item.session && item.session.match(/Day\s*\d+/i)) {
+                    const match = item.session.match(/Day\s*\d+/i);
+                    if (match) {
+                      day = match[0].trim();
+                      sessionName = item.session.replace(/Day\s*\d+[-:| ]*/i, "").trim() || "Event Session";
+                      timeOnly = item.time?.trim() || "TBD";
+                    }
+                  }
+
                   if (!grouped[day]) grouped[day] = [];
-                  grouped[day].push({ ...item, timeOnly: timePart?.trim() || item.time, originalIndex: index });
+                  // Pass the properly mapped variables into the group
+                  grouped[day].push({ ...item, session: sessionName, timeOnly, originalIndex: index });
                 });
 
                 return Object.entries(grouped).map(([day, items]) => (
@@ -497,7 +531,14 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                           <div className="flex justify-between items-center bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-200 shadow-sm">
                             <span className="font-bold text-sm">Total Est. Cost</span>
                             <span className="font-mono font-black text-xl flex items-center gap-1">
-                              {item.output.currency || "$"} {Number(item.output.total_calculated_cost || 0).toLocaleString()}
+                              {/* 🚀 DYNAMIC MATH: If AI fails to sum, React does it automatically */}
+                              {(() => {
+                                let total = Number(item.output.total_calculated_cost) || 0;
+                                if (total === 0 && Array.isArray(item.output.line_items)) {
+                                  total = item.output.line_items.reduce((sum: number, li: any) => sum + (Number(li.cost) || 0), 0);
+                                }
+                                return `${item.output.currency || "INR"} ${total.toLocaleString()}`;
+                              })()}
                             </span>
                           </div>
                           <div className="space-y-2">

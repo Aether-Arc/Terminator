@@ -31,10 +31,9 @@ def save_memory(mem):
 # =========================
 
 class ScheduledSession(BaseModel):
-    session: str
-    time: str
+    session: str = Field(description="The actual name of the event/session (e.g., 'Opening Keynote', 'Hackathon Start'). DO NOT put the day here.")
+    time: str = Field(description="The day and time formatted EXACTLY as: 'Day X | HH:MM AM - HH:MM PM'")
     status: str = "Locked"
-
 
 class EventSchedule(BaseModel):
     schedule: List[ScheduledSession]
