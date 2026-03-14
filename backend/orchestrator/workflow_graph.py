@@ -234,7 +234,7 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
         incoming_outputs = feedback.get("agent_outputs", state.get("agent_outputs"))
         
         if action == "approve": 
-            return Command(update={"audit_log": ["Approved all assets."]}, goto=END)
+            return Command(update={"audit_log": ["Approved all assets."]}, goto="human_review")
             
         elif action == "direct_edit": 
             # This handles the UI "Save Edits" button and the CANCELLATION protocol from route_user_intent
