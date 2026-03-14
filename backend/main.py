@@ -175,18 +175,13 @@ async def fork_event(request: ForkRequest):
     except Exception as e:
         print(f"[❌] Fork Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-# ===============================
-# Crisis Simulation
-# ===============================
+      
 @app.post("/simulate_crisis")
 async def crisis(data: dict):
     result = await orchestrator.handle_crisis(data, swarm_streamer)
     return result
 
-# ===============================
-# Endpoints requiring URL decoding
-# ===============================
+
 @app.get("/status")
 def status():
     return {"system": "EventOS DeepMind Swarm running"}
@@ -245,9 +240,7 @@ async def get_master_ledger(thread_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read LangGraph ledger: {e}")
 
-# ===============================
-# 🚀 SMART CHAT (The Brain Router)
-# ===============================
+
 @app.post("/api/chat")
 async def handle_smart_chat(request: Request):
     data = await request.json()
@@ -261,9 +254,10 @@ async def handle_smart_chat(request: Request):
 
     try:
         if payload.get("action") == "prompt":
+          
             result = await orchestrator.route_user_intent(
                 thread_id, 
-                payload.get("message"), 
+                payload, 
                 swarm_streamer
             )
         else:
@@ -276,4 +270,31 @@ async def handle_smart_chat(request: Request):
         }
     except Exception as e:
         print(f"[❌] Orchestration Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+# ===============================
+# UI Manual Edit & Approval Hooks
+# ===============================
+@app.post("/api/edit/manual")
+async def api_edit_manual(data: dict):
+    """Directly injects the user's UI edits into LangGraph memory without AI intervention."""
+    try:
+        thread_id = urllib.parse.unquote(data.get("thread_id", ""))
+        schedule = data.get("schedule", [])
+        
+        config = {"configurable": {"thread_id": thread_id}}
+        # Update the graph state directly
+        orchestrator.graph.update_state(config, {"schedule": schedule})
+        return {"status": "success", "message": "Manual edits saved to memory."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/approve")
+async def api_approve(data: dict):
+    """Triggers the graph to finalize the approved assets."""
+    try:
+        thread_id = urllib.parse.unquote(data.get("thread_id", ""))
+        return await orchestrator.resume_workflow(thread_id, {"action": "approve"}, swarm_streamer)
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

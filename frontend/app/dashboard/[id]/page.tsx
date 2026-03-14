@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from 'react'
-import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Sparkles, LayoutTemplate, Briefcase, Bell, BellOff } from 'lucide-react'
+import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Sparkles, LayoutTemplate, Briefcase, Bell, BellOff, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { fetchHistory, fetchThreadState } from '../../../lib/api'
 
@@ -296,25 +296,102 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
 
           {/* SCHEDULE PANEL */}
+          {/* 🚀 UPGRADED SCHEDULE PANEL (Timeline UI) */}
           <section>
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><Clock size={14} /> Master Schedule</h3>
-            <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <Clock size={14} className="text-indigo-500" /> Master Schedule
+              </h3>
+              
+              {isEditing && (
+                <button 
+                  onClick={() => setSchedule([...schedule, { time: "Day 1 | 00:00 AM - 00:00 AM", session: "New Event Session" }])}
+                  className="bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-indigo-200 transition-colors"
+                >
+                  <Plus size={12} /> Add Session
+                </button>
+              )}
+            </div>
+            
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
               {schedule.length === 0 && <p className="text-sm text-slate-400 p-5 text-center italic">No schedule generated yet. Awaiting Swarm.</p>}
-              {schedule.map((item: any, i) => (
-                <div key={i} className="mb-2 p-3.5 bg-slate-50 rounded-xl border-l-4 border-indigo-500 flex flex-col gap-1.5">
-                  {isEditing ? (
-                    <div className="flex gap-3">
-                      <input className="bg-white text-indigo-600 text-xs font-mono p-2 rounded-lg w-28 border border-slate-200 outline-none shadow-sm" value={item.time} onChange={e => { const newSched = [...schedule]; newSched[i].time = e.target.value; setSchedule(newSched); }} />
-                      <input className="bg-white text-slate-700 text-sm flex-1 p-2 rounded-lg border border-slate-200 outline-none shadow-sm font-medium" value={item.session} onChange={e => { const newSched = [...schedule]; newSched[i].session = e.target.value; setSchedule(newSched); }} />
+              
+              {/* Process Schedule into Groups */}
+              {(() => {
+                const grouped: Record<string, any[]> = {};
+                schedule.forEach((item, index) => {
+                  const [dayPart, timePart] = (item.time || "Day 1 | TBD").split(" | ");
+                  const day = dayPart?.trim() || "Day 1";
+                  if (!grouped[day]) grouped[day] = [];
+                  grouped[day].push({ ...item, timeOnly: timePart?.trim() || item.time, originalIndex: index });
+                });
+
+                return Object.entries(grouped).map(([day, items]) => (
+                  <div key={day} className="mb-10 last:mb-0">
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="h-px flex-1 bg-slate-200"></div>
+                      <span className="bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-widest px-4 py-1.5 rounded-full border border-slate-200 shadow-sm">
+                        {day}
+                      </span>
+                      <div className="h-px flex-1 bg-slate-200"></div>
                     </div>
-                  ) : (
-                    <>
-                      <span className="text-indigo-500 text-xs font-mono font-semibold">{item.time}</span>
-                      <p className="text-sm font-medium text-slate-800">{item.session}</p>
-                    </>
-                  )}
-                </div>
-              ))}
+
+                    <div className="relative border-l-2 border-slate-200 ml-4 md:ml-6 space-y-6 pb-4">
+                      {items.map((item, i) => (
+                        <div key={i} className="relative pl-6 md:pl-8 group">
+                          {/* Timeline Dot */}
+                          <div className="absolute w-3.5 h-3.5 bg-white border-2 border-indigo-500 rounded-full -left-[9px] top-4 ring-4 ring-white group-hover:bg-indigo-500 transition-colors"></div>
+                          
+                          {/* Event Card */}
+                          <div className="bg-slate-50 border border-slate-100 hover:border-indigo-100 p-4 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col gap-2 relative">
+                            {isEditing ? (
+                              <div className="flex flex-wrap gap-3 items-center">
+                                <input 
+                                  className="bg-white text-indigo-600 text-xs font-mono font-bold p-2.5 rounded-lg w-36 border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100 transition-all" 
+                                  value={item.timeOnly} 
+                                  onChange={e => { 
+                                    const newSched = [...schedule]; 
+                                    newSched[item.originalIndex].time = `${day} | ${e.target.value}`; 
+                                    setSchedule(newSched); 
+                                  }} 
+                                />
+                                <input 
+                                  className="bg-white text-slate-800 text-sm flex-1 p-2.5 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100 font-semibold transition-all" 
+                                  value={item.session} 
+                                  onChange={e => { 
+                                    const newSched = [...schedule]; 
+                                    newSched[item.originalIndex].session = e.target.value; 
+                                    setSchedule(newSched); 
+                                  }} 
+                                />
+                                <button 
+                                  onClick={() => { 
+                                    const newSched = schedule.filter((_, idx) => idx !== item.originalIndex); 
+                                    setSchedule(newSched); 
+                                  }}
+                                  className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                                  title="Delete Session"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4">
+                                <span className="text-indigo-600 text-xs font-mono font-bold min-w-[140px]">
+                                  {item.timeOnly}
+                                </span>
+                                <h4 className="text-sm font-bold text-slate-800 leading-snug">
+                                  {item.session}
+                                </h4>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           </section>
 

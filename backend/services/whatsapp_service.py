@@ -3,11 +3,14 @@ import re
 import asyncio
 from twilio.rest import Client # 🚀 USE STANDARD CLIENT
 
+from typing import Any
+from dotenv import load_dotenv
+
 async def send_whatsapp_blast(contacts: list[dict], message: str) -> list[str]:
     """Sends an asynchronous REAL WhatsApp message to all contacts via Twilio."""
     
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID", "your_fallback_sid_here")
-    auth_token = os.getenv("TWILIO_AUTH_TOKEN", "your_fallback_token_here")
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID", "ACe1abaa917bd7761d0305399c3398f0d7")
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN", "2576855951c09b5e679c8608b19b9e2a")
     twilio_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")
     
     # 1. Initialize the standard client
@@ -23,7 +26,7 @@ async def send_whatsapp_blast(contacts: list[dict], message: str) -> list[str]:
             
             if not clean_phone.startswith('+'):
                 if len(clean_phone) == 10:
-                    clean_phone = f"+1{clean_phone}"
+                    clean_phone = f"+91{clean_phone}"
                 else:
                     clean_phone = f"+{clean_phone}"
 
