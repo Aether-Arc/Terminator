@@ -6,7 +6,7 @@ import { Calendar, MapPin, Users, Sparkles, Upload, FileText } from 'lucide-reac
 export default function EventForm() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [selectedAgents, setSelectedAgents] = useState<string[]>(["marketing", "email", "budget", "sponsor", "volunteer"])
+  const [selectedAgents, setSelectedAgents] = useState<string[]>(["marketing", "email", "budget", "sponsor", "volunteer", "design"])
 
   const toggleAgent = (agent: string) => {
     setSelectedAgents(prev => 

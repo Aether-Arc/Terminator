@@ -7,6 +7,7 @@ import re
 
 from agents.planner_agent import PlannerAgent
 from agents.scheduler_agent import SchedulerAgent
+from agents.itinerary_agent import ItineraryAgent
 from agents.marketing_agent import MarketingAgent
 from agents.updater_agent import UpdaterAgent
 from agents.email_agent import EmailAgent
@@ -41,11 +42,12 @@ class EventOrchestrator:
         self.comms = CommsAgent() 
         self.design = DesignAgent()
         self.resource = ResourceAgent()
+        self.itinerary = ItineraryAgent()
         
         self.graph = build_graph(
             self.planner, self.scheduler, self.marketing,
             self.comms, self.budget, self.volunteer, self.sponsor, 
-            self.updater_agent, self.resource, self.design
+            self.updater_agent, self.resource, self.design, self.itinerary
         )
         
         self.user_context = Context(user_id="user_anmol") 

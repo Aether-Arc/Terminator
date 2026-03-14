@@ -25,6 +25,11 @@ class Context:
 
 def merge_work(existing: list[dict], new_work: list[dict]) -> list[dict]:
     """Smart Reducer: Overwrites old tasks with newer versions based on domain+task signature."""
+    if existing is None:
+        existing = []
+    if new_work is None:
+        new_work = []
+        
     work_dict = {f"{w.get('domain')}_{w.get('task')}": w for w in existing}
     for w in new_work:
         work_dict[f"{w.get('domain')}_{w.get('task')}"] = w
@@ -136,7 +141,7 @@ def build_marketing_subgraph(marketing, comms_agent, design_agent):
 # ==========================================
 # 3. TEAM 2: OPERATIONS SUPERVISOR
 # ==========================================
-def build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, resource_agent):
+def build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, resource_agent, itinerary_agent):
     graph = StateGraph(SubgraphState)
 
     async def ops_supervisor(state: SubgraphState):
@@ -146,6 +151,8 @@ def build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, reso
         if "volunteer" in requested: tasks.append({"domain": "volunteer", "specifics": "Assign Desk Shifts"})
         if "sponsor" in requested: tasks.append({"domain": "sponsor", "specifics": "Draft Sponsors Pitch"})
         if "resource" in requested: tasks.append({"domain": "resource", "specifics": "Allocate physical rooms"})
+        # 🚀 ALWAYS run the itinerary agent to detail the schedule
+        tasks.append({"domain": "itinerary", "specifics": "Expand Base Schedule"})
         return {"tasks": tasks}
 
     def assign_ops_workers(state: SubgraphState):
@@ -159,6 +166,7 @@ def build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, reso
             elif domain == "resource": return await resource_agent.allocate(state["event_data"], state["schedule"], specifics)
             elif domain == "volunteer": return await volunteer_agent.assign_shifts(state["event_data"], state["schedule"], specifics)
             elif domain == "sponsor": return await sponsor_agent.draft_sponsorships(state["event_data"], specifics)
+            elif domain == "itinerary": return await itinerary_agent.expand_schedule(state["event_data"], state["schedule"])
 
         try:
             result = await asyncio.wait_for(run_agent(), timeout=45.0)
@@ -176,7 +184,7 @@ def build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, reso
 # ==========================================
 # 4. CHIEF ORCHESTRATOR (MAIN GRAPH)
 # ==========================================
-def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, updater_agent, resource_agent, design_agent):
+def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, updater_agent, resource_agent, design_agent, itinerary_agent):
     workflow = StateGraph(GraphState, context_schema=Context)
 
     async def run_planner(state: GraphState, runtime: Runtime[Context]) -> Command[Literal["scheduler"]]:
@@ -250,7 +258,7 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
     # 🚀 STATE ISOLATION WRAPPERS
     # ==========================================
     marketing_compiled = build_marketing_subgraph(marketing, comms_agent, design_agent)
-    operations_compiled = build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, resource_agent)
+    operations_compiled = build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, resource_agent, itinerary_agent)
 
     async def marketing_team_node(state: dict):
         # Runs the subgraph but ONLY returns the deduplicated completed_work
