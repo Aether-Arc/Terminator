@@ -1,0 +1,124 @@
+[
+  [
+    {
+      "session": "Day 1",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "CodeStorm Arena"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Networking Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:50 AM - 1:00 PM",
+      "status": "Innovation Lab"
+    },
+    {
+      "session": "Day 1",
+      "time": "1:00 PM - 2:00 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 1",
+      "time": "2:00 PM - 4:00 PM",
+      "status": "Street Games Carnival"
+    },
+    {
+      "session": "Day 1",
+      "time": "4:00 PM - 4:30 PM",
+      "status": "Tea Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "4:30 PM - 6:30 PM",
+      "status": "Battle of Bands"
+    },
+    {
+      "session": "Day 1",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Fusion Night"
+    },
+    {
+      "session": "Day 2",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "Startup Pitch"
+    },
+    {
+      "session": "Day 2",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Recharge Break"
+    },
+    {
+      "session": "Day 2",
+      "time": "10:50 AM - 1:00 PM",
+      "status": "Clash Campus Carnival"
+    },
+    {
+      "session": "Day 2",
+      "time": "1:00 PM - 2:00 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 2",
+      "time": "2:00 PM - 4:00 PM",
+      "status": "RoboWar Trials"
+    },
+    {
+      "session": "Day 2",
+      "time": "4:00 PM - 4:30 PM",
+      "status": "Evening Chill Break"
+    },
+    {
+      "session": "Day 2",
+      "time": "4:30 PM - 6:30 PM",
+      "status": "Talent Showdown"
+    },
+    {
+      "session": "Day 2",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Dinner and Community Impact Lab"
+    },
+    {
+      "session": "Day 3",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "CodeStorm Arena Finals"
+    },
+    {
+      "session": "Day 3",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Dinner Connect Break"
+    },
+    {
+      "session": "Day 3",
+      "time": "10:50 AM - 1:00 PM",
+      "status": "Innovation Lab Workshop"
+    },
+    {
+      "session": "Day 3",
+      "time": "1:00 PM - 2:00 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 3",
+      "time": "2:00 PM - 4:00 PM",
+      "status": "Street Games Carnival Finals"
+    },
+    {
+      "session": "Day 3",
+      "time": "4:00 PM - 4:30 PM",
+      "status": "Tea Break"
+    },
+    {
+      "session": "Day 3",
+      "time": "4:30 PM - 6:30 PM",
+      "status": "Battle of Bands Finals"
+    },
+    {
+      "session": "Day 3",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Closing Ceremony and Prize Distribution"
+    }
+  ]
+]
