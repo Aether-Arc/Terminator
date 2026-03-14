@@ -28,8 +28,8 @@ class SponsorAgent:
 
     # ADDED 'specifics' parameter
     async def draft_sponsorships(self, event_data, specifics):
-        event_name = event_data.get("name", "Tech Event")
-        theme = event_data.get("marketing_prompt", "Technology")
+        event_name = event_data.get("name", " Event")
+        theme = event_data.get("marketing_prompt", "General event")
         crowd_size = event_data.get("expected_crowd", 500)
 
         prompt = f"""

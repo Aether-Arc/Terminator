@@ -60,6 +60,7 @@ export default function Navbar() {
         >
           <Network size={22} className={`${isActive('/agents') ? '' : 'group-hover:scale-110'} transition-transform duration-200`} />
         </Link>
+        
 
       </nav>
     </div>

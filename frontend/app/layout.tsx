@@ -17,8 +17,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={`${orbitron.variable} ${firaCode.variable} font-sans bg-vscode-bg text-vscode-text flex h-screen overflow-hidden`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${orbitron.variable} ${firaCode.variable} font-sans bg-vscode-bg text-vscode-text flex h-screen overflow-hidden`}suppressHydrationWarning>
         {/* VS Code style Activity Bar on the left */}
         <Navbar />
         {/* Main Editor Area */}

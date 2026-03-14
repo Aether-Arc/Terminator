@@ -220,12 +220,28 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
         feedback = interrupt("Review everything. Edit directly, chat to modify, or approve.")
         action = feedback.get("action", "prompt")
         
-        if action == "approve": return Command(update={"audit_log": ["Approved all assets."]}, goto=END)
+        # 🚀 FIXED: Ensure that if the UI sends a manual schedule edit or cancellation, 
+        # it forcefully overwrites the state here.
+        incoming_schedule = feedback.get("schedule", state.get("schedule"))
+        incoming_outputs = feedback.get("agent_outputs", state.get("agent_outputs"))
+        
+        if action == "approve": 
+            return Command(update={"audit_log": ["Approved all assets."]}, goto=END)
+            
         elif action == "direct_edit": 
-            return Command(update={"schedule": feedback.get("schedule", state["schedule"]), "agent_outputs": feedback.get("agent_outputs", state["agent_outputs"])}, goto="human_review")
-        elif action == "prompt": return Command(update={"user_feedback": feedback.get("message", "")}, goto="updater_node")
-        else: return Command(update={"event_data": {"user_constraints": feedback.get("message", "")}, "completed_work": []}, goto="planner")
-
+            # This handles the UI "Save Edits" button and the CANCELLATION protocol from route_user_intent
+            return Command(
+                update={"schedule": incoming_schedule, "agent_outputs": incoming_outputs}, 
+                goto="human_review"
+            )
+            
+        elif action == "prompt": 
+            # This passes the text message to the AI Updater
+            return Command(update={"user_feedback": feedback.get("message", "")}, goto="updater_node")
+            
+        else: 
+            return Command(update={"event_data": {"user_constraints": feedback.get("message", "")}, "completed_work": []}, goto="planner")
+        
     async def updater_node(state: GraphState) -> Command[Literal["human_review"]]:
         new_schedule, new_outputs = await updater_agent.process_update(instructions=state["user_feedback"], schedule=state.get("schedule"), outputs=state.get("agent_outputs"))
         return Command(update={"schedule": new_schedule, "agent_outputs": new_outputs}, goto="human_review")

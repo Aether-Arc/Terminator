@@ -21,7 +21,14 @@ async def parse_messy_csv(csv_content: str) -> list[dict]:
     headers = rows[0]
     sample_data = rows[1:4] 
     
-    llm = ChatOpenAI(model=LOCAL_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0)
+    # 🚀 ENFORCING STRICT JSON MODE USING CONFIG VARIABLES
+    llm = ChatOpenAI(
+        model=LOCAL_MODEL, 
+        base_url=OLLAMA_BASE_URL, 
+        api_key=OPENAI_API_KEY, 
+        temperature=0,
+        model_kwargs={"response_format": {"type": "json_object"}} # Forces pure JSON output
+    )
     
     prompt = f"""
     You are a data extraction tool. I have a CSV with the following headers: {headers}
@@ -32,6 +39,8 @@ async def parse_messy_csv(csv_content: str) -> list[dict]:
     
     Return ONLY a valid JSON dictionary where the keys are the original CSV headers, and the values are the standard keys.
     Example: {{"Participant Name": "name", "Contact Mail": "email", "Phone #": "phone", "Type": "role"}}
+    
+    CRITICAL: Output ONLY the JSON object. Do not include greetings, explanations, or markdown formatting blocks like ```json.
     """
     
     try:

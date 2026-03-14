@@ -36,7 +36,7 @@ class BudgetAgent:
         crowd = event_data.get("expected_crowd", 500)
         location = event_data.get("location", "the target city")
         event_name = event_data.get("name", "Event")
-        event_type = event_data.get("event_type", "Tech Conference")
+        event_type = event_data.get("event_type", " Conference")
         duration = event_data.get("duration", "1 day")
 
         prompt = f"""

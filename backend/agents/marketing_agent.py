@@ -17,7 +17,7 @@ class MarketingAgent:
     async def generate_campaign(self, event_data, specifics):
         event_name = event_data.get('name', 'the upcoming event')
         # Extract broader context so the AI knows WHAT the event actually is
-        event_theme = event_data.get('event_type', 'Technology and Innovation')
+        event_theme = event_data.get('event_type', 'General Event')
         event_constraints = event_data.get('user_constraints', 'No specific constraints.')
         days_until = event_data.get('days_until_event', 14)
         
@@ -42,7 +42,7 @@ class MarketingAgent:
         ===============================
         1. 🚫 DO NOT search for generic "Twitter trends" or "LinkedIn trends" (e.g., DO NOT pull in random trending topics like WWE #SmackDown, celebrity gossip, or generic platform advice).
         2. You MUST use the 'web_search' tool to research real, current news, breakthroughs, or trending topics SPECIFICALLY related to the Event Theme ({event_theme}) or the specific topics mentioned in the User Constraints.
-        3. Incorporate at least ONE highly relevant, factual piece of industry news or tech trend from your search into the social media copy to make it authoritative and timely.
+        3. Incorporate at least ONE highly relevant, factual piece of industry news or  trend from your search into the social media copy to make it authoritative and timely.
         
         ===============================
         🤖 ML INTELLIGENCE & DEPLOYMENT
@@ -56,7 +56,7 @@ class MarketingAgent:
         ===============================
         - NEVER hallucinate unrelated topics. The content MUST strictly relate to {event_name}.
         - The tone should be highly engaging, professional, and hyped, perfectly tailored to the requested format ({specifics}).
-        - Keep hashtags highly relevant to the event's actual domain (e.g., #Tech, #Innovation, etc. NEVER use unrelated viral tags).
+        - Keep hashtags highly relevant to the event's actual domain (e.g., #Trend, #Innovation, etc. NEVER use unrelated viral tags).
         """
         
         try:

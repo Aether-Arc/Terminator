@@ -29,6 +29,7 @@ export default function EventForm() {
     // Perfectly maps to the backend event_data dictionary
     const payload = {
       name: formData.get("event_name"),
+      event_type: formData.get("event_type"),
       expected_crowd: parseInt(formData.get("expected_crowd") as string),
       location: formData.get("location"),
       date: formData.get("date"),
@@ -47,7 +48,9 @@ export default function EventForm() {
     { id: "budget", name: "Financial CFO Agent", desc: "Researches local prices to build bottom-up budgets." },
     { id: "volunteer", name: "Operations Coordinator", desc: "Assigns physical shifts based on the timeline." },
     { id: "marketing", name: "Marketing Director", desc: "Researches trends to write viral social media copy." },
-    { id: "email", name: "Communications Agent", desc: "Drafts hyper-personalized email invites." }
+    { id: "email", name: "Communications Agent", desc: "Drafts hyper-personalized email invites." },
+    { id: "design", name: "Creative Design Agent", desc: "Generates visual assets and UI cards for the Studio." } 
+  
   ]
 
   return (
