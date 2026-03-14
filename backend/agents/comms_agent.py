@@ -1,19 +1,18 @@
 import json
+import re
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent # 🚀 Required for Web Search abilities
 from langchain_core.utils.json import parse_json_markdown
 from config import CLOUD_MODEL, OLLAMA_BASE_URL, OPENAI_API_KEY
 from tools.system_tools import swarm_tools
 
+from config import get_resilient_llm
+
 class CommsAgent:
     def __init__(self):
         # We use a slightly higher temperature (0.4) here to allow for creative, engaging copywriting
-        self.llm = ChatOpenAI(
-            model=CLOUD_MODEL, 
-            base_url=OLLAMA_BASE_URL, 
-            api_key=OPENAI_API_KEY, 
-            temperature=0.4
-        )
+        self.llm = get_resilient_llm(temperature=0.4)
+
         # 🚀 THE UPGRADE: We bind the web search tools so the agent can browse the internet!
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
 
@@ -66,16 +65,33 @@ class CommsAgent:
             res = await self.agent_executor.ainvoke({"messages": [("user", prompt)]})
             
             # The final output is the last message after the tools have finished running
-            final_text = res["messages"][-1].content
+            final_text = ""
+            for msg in reversed(res["messages"]):
+                content = getattr(msg, "content", "")
+                if content and isinstance(content, str) and content.strip():
+                    final_text = content.strip()
+                    break
             
-            # Cleanly parses the JSON, ignoring any conversational LLM filler!
-            strategy = parse_json_markdown(final_text)
+            if not final_text:
+                raise ValueError("LLM returned an empty final response after tools.")
+
+            # 🚀 2. BULLETPROOF JSON PARSING
+            try:
+                # Try the official Langchain parser first
+                strategy = parse_json_markdown(final_text)
+            except Exception:
+                # If it fails, brutally extract the JSON block using Regex
+                match = re.search(r'(\{.*\}|\[.*\])', final_text, re.DOTALL)
+                if match:
+                    strategy = json.loads(match.group(0))
+                else:
+                    raise ValueError(f"No JSON block found in response.")
+
             strategy["recipient"] = "All Participants"
             return strategy
             
         except Exception as e:
-            print(f"[*] CommsAgent Error: Failed to parse LLM JSON: {e}")
-            # Safe Fallback to prevent pipeline crashes
+            print(f"[*] CommsAgent Error: {e}")
             return {
                 "use_email": True, 
                 "email_subject": f"Update regarding {event_name}", 

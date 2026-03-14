@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from 'react'
-import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Sparkles, LayoutTemplate } from 'lucide-react'
+import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Sparkles, LayoutTemplate, Briefcase } from 'lucide-react'
 import Link from 'next/link'
 import { fetchHistory, fetchThreadState } from '../../../lib/api'
 
@@ -11,7 +11,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
   // Chat State
   const [chatInput, setChatInput] = useState("")
-  const [messages, setMessages] = useState<{role: string, content: string}[]>([
+  const [messages, setMessages] = useState<{ role: string, content: string }[]>([
     { role: 'ai', content: 'Hello! I am your Event Intelligence Agent. How can we adjust the current plan?' }
   ])
 
@@ -27,11 +27,11 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       .then(res => {
         if (res && res.threads) {
           const historyList = res.threads.map((t: string) => ({
-             id: t, 
-             title: `Thread (${t.substring(0, 8)})`
+            id: t,
+            title: `Thread (${t.substring(0, 8)})`
           }));
           setThreads([
-            { id: params.id, title: "Current Active Plan" }, 
+            { id: params.id, title: "Current Active Plan" },
             ...historyList.filter((t: any) => t.id !== params.id)
           ]);
         }
@@ -42,14 +42,14 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       fetchThreadState(params.id)
         .then(data => {
           if (data.schedule) setSchedule(data.schedule);
-          
+
           // 🚀 FIXED: Gracefully load comms and marketing
           if (data.agent_outputs) {
-             setOutputs({
-                 marketing: data.agent_outputs.marketing || [],
-                 comms: data.agent_outputs.comms || data.agent_outputs.emails || [],
-                 operations: data.agent_outputs.operations || []
-             });
+            setOutputs({
+              marketing: data.agent_outputs.marketing || [],
+              comms: data.agent_outputs.comms || data.agent_outputs.emails || [],
+              operations: data.agent_outputs.operations || []
+            });
           }
           if (data.status) setStatus(data.status);
         })
@@ -64,7 +64,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
     const userMessage = chatInput;
     setChatInput("");
-    
+
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setStatus("PROCESSING_UPDATE");
 
@@ -73,23 +73,23 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       const res = await fetch('http://localhost:8000/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          thread_id: params.id, 
-          prompt_text: userMessage 
+        body: JSON.stringify({
+          thread_id: params.id,
+          prompt_text: userMessage
         })
       });
       const data = await res.json();
-      
+
       if (data.schedule) setSchedule(data.schedule);
-      
+
       if (data.marketing || data.comms) {
-          setOutputs(prev => ({
-              ...prev,
-              marketing: data.marketing || prev.marketing,
-              comms: data.comms || prev.comms
-          }));
+        setOutputs(prev => ({
+          ...prev,
+          marketing: data.marketing || prev.marketing,
+          comms: data.comms || prev.comms
+        }));
       }
-      
+
       setMessages(prev => [...prev, { role: 'ai', content: data.status === "dispatched" ? "Communications dispatched successfully!" : "I've updated the workspace based on your request. Please review the changes on the right." }]);
       setStatus(data.status === "dispatched" ? "COMPLETED" : "AWAITING_APPROVAL");
     } catch (err) {
@@ -109,9 +109,9 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       await fetch('http://localhost:8000/api/edit/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          thread_id: params.id, 
-          schedule: schedule 
+        body: JSON.stringify({
+          thread_id: params.id,
+          schedule: schedule
         })
       });
       setMessages(prev => [...prev, { role: 'ai', content: "Manual edits successfully saved to memory." }]);
@@ -132,13 +132,13 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         body: JSON.stringify({ thread_id: params.id })
       });
       const data = await res.json();
-      
+
       if (data.marketing || data.email_outreach_logs) {
-          setOutputs(prev => ({
-              ...prev,
-              marketing: data.marketing || prev.marketing,
-              comms: data.email_outreach_logs || prev.comms
-          }));
+        setOutputs(prev => ({
+          ...prev,
+          marketing: data.marketing || prev.marketing,
+          comms: data.email_outreach_logs || prev.comms
+        }));
       }
 
       setMessages(prev => [...prev, { role: 'ai', content: "Event approved! All assets are finalized and ready for deployment." }]);
@@ -150,7 +150,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
   }
 
   const getStatusStyles = (currentStatus: string) => {
-    switch(currentStatus) {
+    switch (currentStatus) {
       case 'COMPLETED': return 'bg-emerald-100 text-emerald-700 border-emerald-200'
       case 'PROCESSING_UPDATE': return 'bg-indigo-100 text-indigo-700 border-indigo-200 animate-pulse'
       case 'SAVING_EDITS': return 'bg-blue-100 text-blue-700 border-blue-200 animate-pulse'
@@ -161,7 +161,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
-      
+
       {/* COLUMN 1: Sidebar (History) */}
       <div className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 bg-white border-r border-slate-200 flex flex-col overflow-hidden shadow-sm z-20`}>
         <div className="p-4 border-b border-slate-100">
@@ -189,10 +189,10 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         <header className="h-16 border-b border-slate-100 flex items-center justify-between px-5 bg-white">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-slate-400 hover:text-indigo-600 transition-colors bg-slate-50 hover:bg-indigo-50 p-1.5 rounded-lg">
-              {sidebarOpen ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}
+              {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
             </button>
             <div className="font-bold text-slate-800 flex items-center gap-2">
-              <Sparkles size={18} className="text-indigo-500"/> Copilot
+              <Sparkles size={18} className="text-indigo-500" /> Copilot
             </div>
           </div>
         </header>
@@ -201,11 +201,10 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${
-                m.role === 'user' 
-                  ? 'bg-indigo-600 text-white rounded-br-none shadow-indigo-200' 
+              <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${m.role === 'user'
+                  ? 'bg-indigo-600 text-white rounded-br-none shadow-indigo-200'
                   : 'bg-white text-slate-700 rounded-bl-none border border-slate-200'
-              }`}>
+                }`}>
                 {m.content}
               </div>
             </div>
@@ -227,7 +226,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         {/* Chat Input */}
         <div className="p-4 bg-white border-t border-slate-100">
           <form onSubmit={handleChat} className="flex items-center gap-3 bg-slate-50 border border-slate-200 p-2 rounded-2xl focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
-            <input 
+            <input
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               placeholder="e.g., Send the emails or Delay event by 2 hours..."
@@ -243,11 +242,11 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
       {/* COLUMN 3: Live Workspace (Outputs & Schedule) */}
       <div className="flex-[1.2] flex flex-col bg-slate-50 overflow-hidden">
-        
+
         <header className="h-16 border-b border-slate-200 flex items-center justify-between px-8 bg-white shadow-sm z-10">
           <h2 className="font-bold text-slate-800 flex items-center gap-3">
             <LayoutTemplate size={18} className="text-slate-400" />
-            Live Workspace 
+            Live Workspace
             <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${getStatusStyles(status)}`}>
               {status.replace("_", " ")}
             </span>
@@ -271,10 +270,10 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         </header>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
-          
+
           {/* SCHEDULE PANEL */}
           <section>
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><Clock size={14}/> Master Schedule</h3>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><Clock size={14} /> Master Schedule</h3>
             <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
               {schedule.length === 0 && <p className="text-sm text-slate-400 p-5 text-center italic">No schedule generated yet. Awaiting Swarm.</p>}
               {schedule.map((item: any, i) => (
@@ -298,10 +297,10 @@ export default function Dashboard({ params }: { params: { id: string } }) {
           {/* 🚀 FIXED: OMNICHANNEL COMMS PANEL */}
           <section>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2"><Mail size={14}/> Communication Hub</h3>
-              <button onClick={() => { setChatInput("Send all drafted communications"); handleChat({ preventDefault: () => {} } as any); }} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 hover:bg-emerald-500 shadow-sm transition-all"><Send size={12}/> Dispatch All</button>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2"><Mail size={14} /> Communication Hub</h3>
+              <button onClick={() => { setChatInput("Send all drafted communications"); handleChat({ preventDefault: () => { } } as any); }} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 hover:bg-emerald-500 shadow-sm transition-all"><Send size={12} /> Dispatch All</button>
             </div>
-            
+
             <div className="space-y-4">
               {outputs.comms?.length === 0 && <p className="text-sm text-slate-400 italic text-center p-4">No comms drafted yet.</p>}
               {outputs.comms?.map((item: any, i: number) => {
@@ -333,7 +332,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
           {/* MARKETING PANEL */}
           <section>
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><MessageSquare size={14}/> Social & Marketing</h3>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><MessageSquare size={14} /> Social & Marketing</h3>
             <div className="space-y-4">
               {outputs.marketing?.length === 0 && <p className="text-sm text-slate-400 italic text-center p-4">No marketing assets yet.</p>}
               {outputs.marketing?.map((item: any, i: number) => (
@@ -342,6 +341,52 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                   <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{item.output}</p>
                 </div>
               ))}
+            </div>
+          </section>
+          {/* OPERATIONS & LOGISTICS PANEL (Budget, Volunteer, Sponsor, Resource) */}
+          <section className="mt-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <Briefcase size={14} className="text-amber-500" /> Operations & Logistics
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {outputs.operations?.length === 0 && (
+                <p className="text-sm text-slate-400 italic p-4 col-span-2 border border-dashed border-slate-200 rounded-2xl text-center">
+                  No operational logistics drafted yet.
+                </p>
+              )}
+
+              {outputs.operations?.map((item: any, i: number) => {
+                // Safely handle both JSON objects and plain text strings
+                const isObject = typeof item.output === 'object' && item.output !== null;
+
+                return (
+                  <div key={i} className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="text-[10px] font-extrabold text-amber-700 bg-amber-100 px-3 py-1.5 rounded-full uppercase tracking-widest shadow-sm">
+                        {item.domain || "Operation"}
+                      </span>
+                      <span className="text-xs font-bold text-slate-400 max-w-[60%] truncate text-right" title={item.task}>
+                        {item.task}
+                      </span>
+                    </div>
+
+                    <div className="flex-1 bg-slate-50/50 rounded-xl p-4 border border-slate-100 overflow-y-auto max-h-[250px]">
+                      {isObject ? (
+                        <pre className="text-[11px] text-slate-600 font-mono whitespace-pre-wrap leading-relaxed">
+                          {JSON.stringify(item.output, null, 2)}
+                        </pre>
+                      ) : (
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                          {item.output}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </section>
 

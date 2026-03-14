@@ -5,15 +5,11 @@ from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
 from tools.system_tools import swarm_tools
+from config import get_resilient_llm
 
 class EmailAgent:
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model=LOCAL_MODEL,
-            base_url=OLLAMA_BASE_URL,
-            api_key=OPENAI_API_KEY,
-            temperature=0.3
-        )
+        self.llm = get_resilient_llm(temperature=0.3)
         # 🚀 Bind the internet search tools to the email agent
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
 

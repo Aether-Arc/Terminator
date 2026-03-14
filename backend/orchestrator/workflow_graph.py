@@ -2,228 +2,249 @@ import operator
 import sqlite3
 import os
 import uuid
-from typing import TypedDict, Any, List, Annotated, Literal
+import asyncio
+import json
+from typing import TypedDict, Any, List, Annotated, Literal, Dict
 from dataclasses import dataclass
+from config import get_resilient_llm, USE_CRITIC_AGENT # 🚀 IMPORT THE TOGGLE
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.store.memory import InMemoryStore
 from langgraph.runtime import Runtime
 from langgraph.types import Send, Command, interrupt
+from langchain_openai import ChatOpenAI
 
-# --- 1. MEMORY SCHEMAS ---
+
+# ==========================================
+# 1. ADVANCED MEMORY SCHEMAS & REDUCERS
+# ==========================================
 @dataclass
 class Context:
     user_id: str
+
+def merge_work(existing: list[dict], new_work: list[dict]) -> list[dict]:
+    """Smart Reducer: Overwrites old tasks with newer versions based on domain+task signature."""
+    work_dict = {f"{w.get('domain')}_{w.get('task')}": w for w in existing}
+    for w in new_work:
+        work_dict[f"{w.get('domain')}_{w.get('task')}"] = w
+    return list(work_dict.values())
 
 class GraphState(TypedDict):
     event_data: dict
     plan: dict
     schedule: Any
     audit_log: Annotated[List[str], operator.add] 
-    completed_work: Annotated[list[dict], operator.add] 
+    completed_work: Annotated[list[dict], merge_work] # 🚀 Auto-deduplicating reducer!
     agent_outputs: dict 
     user_feedback: str
+    knowledge_base: Annotated[List[str], operator.add] 
 
-# --- 2. THE UNIVERSAL ORCHESTRATOR-WORKER SUBGRAPH ---
-class ExecutionState(TypedDict):
+class SubgraphState(TypedDict):
     event_data: dict
     schedule: list
-    dynamic_tasks: list[dict] 
-    completed_work: Annotated[list[dict], operator.add] 
+    tasks: list[dict]
+    completed_work: Annotated[list[dict], merge_work]
+    knowledge_base: Annotated[list[str], operator.add]
 
 class WorkerState(TypedDict):
     task: dict
     event_data: dict
     schedule: list
 
-def build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent,resource_agent, design_agent):
-    sub_workflow = StateGraph(ExecutionState)
+# ==========================================
+# 2. TEAM 1: MARKETING SUPERVISOR (WITH REFLECTION LOOP)
+# ==========================================
+def build_marketing_subgraph(marketing, comms_agent, design_agent):
+    graph = StateGraph(SubgraphState)
+    critic_llm = get_resilient_llm(temperature=0.1)
 
-    async def master_orchestrator(state: ExecutionState):
-        """Analyzes the event and dynamically creates a universal task list."""
-        tasks_to_spawn = [
-            {"domain": "marketing", "specifics": "Twitter Announcement Thread"},
-            {"domain": "marketing", "specifics": "LinkedIn Professional Post"},
+    async def marketing_supervisor(state: SubgraphState):
+        requested = state["event_data"].get("requested_agents", ["marketing", "comms", "design"])
+        tasks = []
+        if "marketing" in requested: tasks.extend([{"domain": "marketing", "specifics": "Twitter Thread"}, {"domain": "marketing", "specifics": "LinkedIn Post"}])
+        if "comms" in requested: tasks.append({"domain": "comms", "specifics": "Draft Initial Welcome Invite (Email & WhatsApp)"})
+        if "design" in requested: tasks.append({"domain": "design", "specifics": "Create 3 visual social media promo cards"})
+        return {"tasks": tasks}
+
+    def assign_marketing_workers(state: SubgraphState):
+        return [Send("creative_worker", {"task": t, "event_data": state["event_data"], "schedule": state.get("schedule", [])}) for t in state["tasks"]]
+
+    async def creative_worker(state: WorkerState):
+        domain, specifics = state["task"]["domain"], state["task"]["specifics"]
+        
+        async def run_agent():
+            if domain == "marketing": return await marketing.generate_campaign(state["event_data"], specifics)
+            elif domain == "comms": return await comms_agent.draft_communications(state["event_data"], state["schedule"], specifics)
+            elif domain == "design": return await design_agent.generate_cards(state["event_data"], specifics)
+
+        try:
+            result = await asyncio.wait_for(run_agent(), timeout=45.0)
+            return {"completed_work": [{"domain": domain, "task": specifics, "output": result, "needs_revision": True}]}
+        except Exception as e:
+            return {"completed_work": [{"domain": domain, "task": specifics, "output": {"status": "ERROR", "error": str(e)}, "needs_revision": False}]}
+
+    async def quality_control_critic(state: SubgraphState):
+        """🚀 ADVANCED: The Critic evaluates the work. If it's bad, it marks it for revision."""
+
+        if not USE_CRITIC_AGENT:
+            reviewed_work = state.get("completed_work", [])
+            for work in reviewed_work:
+                work["needs_revision"] = False
+            return {"completed_work": reviewed_work}
+        
+        reviewed_work = []
+        for work in state.get("completed_work", []):
+            if not work.get("needs_revision", False) or "ERROR" in str(work["output"]):
+                reviewed_work.append(work)
+                continue
+                
+            # Simulate a fast LLM critique check
+            critique = await critic_llm.ainvoke(f"Review this {work['domain']} output for quality. Output ONLY 'PASS' or 'FAIL'. Output: {work['output']}")
+            if "FAIL" in critique.content:
+                print(f"[🔥 CRITIC] Rejecting {work['domain']} draft. Sending back for rewrite.")
+                work["task"] = f"REWRITE: {work['task']} (Make it more engaging)"
+                
+            work["needs_revision"] = False
+            reviewed_work.append(work)
             
-            {"domain": "budget", "specifics": "Calculate Venue & Catering Estimates"},
-            {"domain": "volunteer", "specifics": "Assign Registration Desk Shifts"},
-            {"domain": "sponsor", "specifics": "Draft Tier 1 Tech Sponsors Pitch"},
-            {"domain": "resource", "specifics": "Allocate physical rooms for all sessions"},
-            {"domain": "comms", "specifics": "Draft Initial Welcome Invite (Email & WhatsApp)"},
-            {"domain": "comms", "specifics": "Draft Reminder Blast for Day Of Event"},
-            {"domain": "design", "specifics": "Create 3 visual social media promo cards"} # 🚀 Add the new task
-        
-        ]
-        return {"dynamic_tasks": tasks_to_spawn}
-
-    def assign_universal_workers(state: ExecutionState):
-        """Spawns a unique worker for EVERY task generated by the orchestrator."""
-        return [
-            Send("domain_worker", {
-                "task": task, 
-                "event_data": state["event_data"], 
-                "schedule": state.get("schedule", [])
-            }) 
-            for task in state["dynamic_tasks"]
-        ]
-
-    async def domain_worker(state: WorkerState):
-        """The universal worker that routes the micro-task to the correct agent class."""
-        task = state["task"]
-        domain = task["domain"]
-        specifics = task["specifics"]
-        
-        if domain == "marketing":
-            result = await marketing.generate_campaign(state["event_data"], specifics)
-        elif domain == "comms": # 🚀 ROUTE TO COMMS AGENT
-            result = await comms_agent.draft_communications(state["event_data"], state["schedule"], specifics)
-        elif domain == "budget":
-            result = await budget_agent.calculate(state["event_data"],state["schedule"], specifics)
-        elif domain == "resource":
-            result = await resource_agent.allocate(state["event_data"], state["schedule"], specifics)
-        elif domain == "volunteer":
-            result = await volunteer_agent.assign_shifts(state["event_data"], state["schedule"], specifics)
-        elif domain == "sponsor":
-            result = await sponsor_agent.draft_sponsorships(state["event_data"], specifics)
-        elif domain == "design":
-            result = await design_agent.generate_cards(state["event_data"], specifics) # 🚀 Route it
-        else:
-            result = f"Completed unknown task: {specifics}"
-
-        return {"completed_work": [{"domain": domain, "task": specifics, "output": result}]}
-
-    # Map-Reduce flow
-    sub_workflow.add_node("master_orchestrator", master_orchestrator)
-    sub_workflow.add_node("domain_worker", domain_worker)
-    sub_workflow.add_edge(START, "master_orchestrator")
-    sub_workflow.add_conditional_edges("master_orchestrator", assign_universal_workers, ["domain_worker"])
-    sub_workflow.add_edge("domain_worker", END)
+        return {"completed_work": reviewed_work}
     
-    return sub_workflow.compile(checkpointer=False)
+    def route_critic(state: SubgraphState):
+        """Checks if any agent failed the critique. If yes, loop back to the worker!"""
+        if any(w.get("needs_revision", False) for w in state.get("completed_work", [])):
+            return "creative_worker" # 🔄 LOOP BACK!
+        return END # ✅ ALL PASSED, FINISH SUBGRAPH!
 
+    graph.add_node("marketing_supervisor", marketing_supervisor)
+    graph.add_node("creative_worker", creative_worker)
+    graph.add_node("quality_control_critic", quality_control_critic)
+    
+    graph.add_edge(START, "marketing_supervisor")
+    graph.add_conditional_edges("marketing_supervisor", assign_marketing_workers, ["creative_worker"])
+    # Route workers to the critic instead of END
+    graph.add_edge("creative_worker", "quality_control_critic")
+    graph.add_edge("quality_control_critic",route_critic, ["creative_worker", END])
+    
+    return graph.compile()
 
-# --- 3. BUILD THE STREAMLINED MAIN GRAPH ---
-# Note: Added 'updater_agent' to the dependencies
-def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, updater_agent,  resource_agent, design_agent):
+# ==========================================
+# 3. TEAM 2: OPERATIONS SUPERVISOR SUBGRAPH
+# ==========================================
+def build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, resource_agent):
+    graph = StateGraph(SubgraphState)
+
+    async def ops_supervisor(state: SubgraphState):
+        requested = state["event_data"].get("requested_agents", ["budget", "volunteer", "sponsor", "resource"])
+        tasks = []
+        if "budget" in requested: tasks.append({"domain": "budget", "specifics": "Calculate Venue Estimates"})
+        if "volunteer" in requested: tasks.append({"domain": "volunteer", "specifics": "Assign Desk Shifts"})
+        if "sponsor" in requested: tasks.append({"domain": "sponsor", "specifics": "Draft Sponsors Pitch"})
+        if "resource" in requested: tasks.append({"domain": "resource", "specifics": "Allocate physical rooms"})
+        return {"tasks": tasks}
+
+    def assign_ops_workers(state: SubgraphState):
+        return [Send("logistics_worker", {"task": t, "event_data": state["event_data"], "schedule": state.get("schedule", [])}) for t in state["tasks"]]
+
+    async def logistics_worker(state: WorkerState):
+        domain, specifics = state["task"]["domain"], state["task"]["specifics"]
+        
+        async def run_agent():
+            if domain == "budget": return await budget_agent.calculate(state["event_data"],state["schedule"], specifics)
+            elif domain == "resource": return await resource_agent.allocate(state["event_data"], state["schedule"], specifics)
+            elif domain == "volunteer": return await volunteer_agent.assign_shifts(state["event_data"], state["schedule"], specifics)
+            elif domain == "sponsor": return await sponsor_agent.draft_sponsorships(state["event_data"], specifics)
+
+        try:
+            result = await asyncio.wait_for(run_agent(), timeout=45.0)
+            return {"completed_work": [{"domain": domain, "task": specifics, "output": result}]}
+        except Exception as e:
+            return {"completed_work": [{"domain": domain, "task": specifics, "output": {"status": "ERROR", "error": str(e)}}]}
+
+    graph.add_node("ops_supervisor", ops_supervisor)
+    graph.add_node("logistics_worker", logistics_worker)
+    graph.add_edge(START, "ops_supervisor")
+    graph.add_conditional_edges("ops_supervisor", assign_ops_workers, ["logistics_worker"])
+    graph.add_edge("logistics_worker", END)
+    return graph.compile()
+
+# ==========================================
+# 4. CHIEF ORCHESTRATOR (MAIN GRAPH)
+# ==========================================
+def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, updater_agent, resource_agent, design_agent):
     workflow = StateGraph(GraphState, context_schema=Context)
 
     async def run_planner(state: GraphState, runtime: Runtime[Context]) -> Command[Literal["scheduler"]]:
         event_data = state["event_data"]
         
+        # 🧠 LONG-TERM MEMORY INJECTION
         namespace = (runtime.context.user_id, "past_events")
         memories = await runtime.store.asearch(namespace, query=event_data.get('name', ''), limit=3)
-        event_data["historical_context"] = "\n".join([m.value.get("event_summary", "") for m in memories]) if memories else ""
+        historical_context = "\n".join([m.value.get("event_summary", "") for m in memories]) if memories else ""
+        
+        hive_mind = "\n".join(state.get("knowledge_base", []))
+        event_data["historical_context"] = f"Past History: {historical_context}\n\nRecent Insights: {hive_mind}"
             
         plan_list = await planner.generate_multiple_plans(event_data, count=1)
-        await runtime.store.aput(namespace, str(uuid.uuid4()), {"event_summary": f"Planned {event_data.get('name')}"})
+        await runtime.store.aput(namespace, str(uuid.uuid4()), {"event_summary": f"Planned {event_data.get('name')} with parameters: {event_data.get('user_constraints')}"})
 
-        return Command(
-            update={"plan": plan_list[0], "audit_log": ["Zero-shot plan generated."]},
-            goto="scheduler"
-        )
+        return Command(update={"plan": plan_list[0], "audit_log": ["Zero-shot plan generated."]}, goto="scheduler")
 
-    async def run_scheduler(state: GraphState) -> Command[Literal["execution_phase"]]:
+    async def run_scheduler(state: GraphState) -> Command[Literal["chief_orchestrator"]]:
         schedule = await scheduler.create_schedule(state["plan"])
-        
-        # ROUTING: Instead of human review, immediately draft all assets!
-        return Command(
-            update={"schedule": schedule},
-            goto="execution_phase"
-        )
+        return Command(update={"schedule": schedule}, goto="chief_orchestrator")
+
+    # 🚀 Parallel Branching
+    def chief_orchestrator(state: GraphState):
+        return [
+            Send("marketing_team", {"event_data": state["event_data"], "schedule": state["schedule"]}),
+            Send("operations_team", {"event_data": state["event_data"], "schedule": state["schedule"]})
+        ]
 
     async def finalize_results(state: GraphState) -> Command[Literal["human_review"]]:
-        raw_work = state.get("completed_work", [])
-        
-        # 🚀 FULLY DYNAMIC FIX: 
-        # Loop through all historical work. Because we loop forward, 
-        # newer outputs automatically overwrite older outputs with the same domain/task!
-        latest_work_dict = {}
-        for w in raw_work:
-            # Create a unique signature for the task (e.g., "marketing_Twitter Announcement Thread")
-            unique_task_id = f"{w.get('domain')}_{w.get('task')}"
-            latest_work_dict[unique_task_id] = w
-            
-        # Convert the dictionary back to a flat list of just the freshest results
-        latest_work = list(latest_work_dict.values())
+        # 🚀 Because we used the `merge_work` reducer, `state["completed_work"]` is ALREADY beautifully deduplicated!
+        latest_work = state.get("completed_work", [])
         
         outputs = {
             "marketing": [w for w in latest_work if w["domain"] == "marketing"],
             "comms": [w for w in latest_work if w["domain"] == "comms"],
-            "design": [w for w in latest_work if w["domain"] == "design"], # 🚀 Expose the output
+            "design": [w for w in latest_work if w["domain"] == "design"],
             "operations": [w for w in latest_work if w["domain"] not in ["marketing", "comms", "design"]]
         }
-        
         return Command(update={"agent_outputs": outputs}, goto="human_review")
 
-    def human_review(state: GraphState) -> Command[Literal["__end__", "updater_node", "planner", "human_review"]]:
-        """User Input Node: Pauses graph to review schedule AND drafted outputs."""
-        
-        # Pauses until UI posts a payload
+    def human_review(state: GraphState) -> Command[Literal["__end__", "updater_node", "planner", "chief_orchestrator"]]:
         feedback = interrupt("Review everything. Edit directly, chat to modify, or approve.")
-        
         action = feedback.get("action", "prompt")
         
-        if action == "approve":
-            # 🚀 Proceed to END (or you can route to a 'send_emails' node)
-            return Command(update={"audit_log": ["Approved all assets."]}, goto=END)
-        
-        elif action == "direct_edit":
-            # 🚀 User typed directly into the dashboard UI and hit save. Do NOT replan.
-            return Command(
-                update={
-                    "schedule": feedback.get("schedule", state["schedule"]),
-                    "agent_outputs": feedback.get("agent_outputs", state["agent_outputs"]),
-                    "audit_log": ["Manual direct edits applied."]
-                },
-                goto="execution_phase" # Loop back to let them see it confirmed
-            )
-            
-        elif action == "prompt":
-            # 🚀 User typed "Delay by 2 hours" or "Change speaker". Route to targeted Updater!
-            return Command(
-                update={"user_feedback": feedback.get("message", "")},
-                goto="updater_node"
-            )
-            
-        else: # action == "replan_all"
-            # 🚀 ONLY if user explicitly wants to tear it all down
-            return Command(
-                update={"event_data": {"user_constraints": feedback.get("message", "")}, "completed_work": []},
-                goto="planner"
-            )
+        if action == "approve": return Command(update={"audit_log": ["Approved all assets."]}, goto=END)
+        elif action == "direct_edit": return Command(update={"schedule": feedback.get("schedule", state["schedule"]), "agent_outputs": feedback.get("agent_outputs", state["agent_outputs"])}, goto="chief_orchestrator")
+        elif action == "prompt": return Command(update={"user_feedback": feedback.get("message", "")}, goto="updater_node")
+        else: return Command(update={"event_data": {"user_constraints": feedback.get("message", "")}, "completed_work": []}, goto="planner")
 
     async def updater_node(state: GraphState) -> Command[Literal["human_review"]]:
-        """LLM node that smartly mutates specific parts of state WITHOUT full replan."""
-        feedback = state["user_feedback"]
-        
-        # Pseudo-code: updater_agent receives current state and instructions, applies delta
-        new_schedule, new_outputs = await updater_agent.process_update(
-            instructions=feedback, 
-            schedule=state.get("schedule"), 
-            outputs=state.get("agent_outputs")
-        )
-        
-        return Command(
-            update={"schedule": new_schedule, "agent_outputs": new_outputs, "audit_log": [f"Updater applied: {feedback}"]},
-            goto="execution_phase" # Loop back to show the updated state
-        )
+        new_schedule, new_outputs = await updater_agent.process_update(instructions=state["user_feedback"], schedule=state.get("schedule"), outputs=state.get("agent_outputs"))
+        return Command(update={"schedule": new_schedule, "agent_outputs": new_outputs}, goto="chief_orchestrator")
 
-    # Register Nodes
+    # ==========================================
+    # GRAPH ASSEMBLY
+    # ==========================================
     workflow.add_node("planner", run_planner)
     workflow.add_node("scheduler", run_scheduler)
     
-    execution_subgraph = build_execution_subgraph(marketing, comms_agent, budget_agent, volunteer_agent, sponsor_agent, resource_agent, design_agent)
-    workflow.add_node("execution_phase", execution_subgraph)
+    workflow.add_node("marketing_team", build_marketing_subgraph(marketing, comms_agent, design_agent))
+    workflow.add_node("operations_team", build_operations_subgraph(budget_agent, volunteer_agent, sponsor_agent, resource_agent))
+    
+    workflow.add_edge(START, "planner")
+    workflow.add_conditional_edges("scheduler", chief_orchestrator, ["marketing_team", "operations_team"])
+    
     workflow.add_node("finalize", finalize_results)
+    workflow.add_edge("marketing_team", "finalize")
+    workflow.add_edge("operations_team", "finalize")
     
     workflow.add_node("human_review", human_review)
     workflow.add_node("updater_node", updater_node)
 
-    # Automatically start at planner, let Command routing handle the rest
-    workflow.add_edge(START, "planner")
-
-    # Persistence
     class AsyncSqliteSaverBridge(SqliteSaver):
         async def aget_tuple(self, config): return self.get_tuple(config)
         async def aput(self, config, checkpoint, metadata, new_versions): return self.put(config, checkpoint, metadata, new_versions)
@@ -232,7 +253,4 @@ def build_graph(planner, scheduler, marketing, comms_agent, budget_agent, volunt
     os.makedirs(os.path.join(os.getcwd(), "memory"), exist_ok=True)
     conn = sqlite3.connect(os.path.join(os.getcwd(), "memory", "swarm_threads.sqlite"), check_same_thread=False)
     
-    return workflow.compile(
-        checkpointer=AsyncSqliteSaverBridge(conn), 
-        store=InMemoryStore()
-    )
+    return workflow.compile(checkpointer=AsyncSqliteSaverBridge(conn), store=InMemoryStore())

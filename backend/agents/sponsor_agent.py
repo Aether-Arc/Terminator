@@ -3,15 +3,11 @@ from langgraph.prebuilt import create_react_agent
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
 from tools.system_tools import swarm_tools
 import json
+from config import get_resilient_llm
 
 class SponsorAgent:
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model=LOCAL_MODEL,
-            base_url=OLLAMA_BASE_URL,
-            api_key=OPENAI_API_KEY,
-            temperature=0.5
-        )
+        self.llm = get_resilient_llm(temperature=0.5)
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
 
     # ADDED 'specifics' parameter

@@ -4,11 +4,12 @@ from langgraph.prebuilt import create_react_agent # 🚀 Required for Web Search
 from langchain_core.utils.json import parse_json_markdown
 from config import CLOUD_MODEL, OLLAMA_BASE_URL, OPENAI_API_KEY
 from tools.system_tools import swarm_tools # 🚀 Import your tools!
+from config import get_resilient_llm
 
 class DesignAgent:
     def __init__(self):
         # Temperature 0.5 allows for creative gradients and punchy copywriting
-        self.llm = ChatOpenAI(model=CLOUD_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0.5)
+        self.llm = get_resilient_llm(temperature=0.5)
         # 🚀 THE UPGRADE: We bind the web search tools so the agent can browse the internet!
         self.agent_executor = create_react_agent(self.llm, swarm_tools)
 

@@ -1,10 +1,11 @@
 from langchain_openai import ChatOpenAI
 from config import OLLAMA_BASE_URL, OPENAI_API_KEY, LOCAL_MODEL
 import json
+from config import get_resilient_llm
 
 class VolunteerAgent:
     def __init__(self):
-        self.llm = ChatOpenAI(model=LOCAL_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0.3)
+        self.llm = get_resilient_llm(temperature=0.3)
 
     # ADDED 'specifics' parameter
     async def assign_shifts(self, event_data, schedule, specifics):

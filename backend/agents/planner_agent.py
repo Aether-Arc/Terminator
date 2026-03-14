@@ -6,15 +6,11 @@ from langchain_core.utils.json import parse_json_markdown
 import json
 import asyncio
 import re
+from config import get_resilient_llm
 
 class PlannerAgent:
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model=CLOUD_MODEL,
-            base_url=OLLAMA_BASE_URL,
-            api_key=OPENAI_API_KEY,
-            temperature=0.4 
-        )
+        self.llm = get_resilient_llm(temperature=0.4)
         
         # This wrapper gives Llama 3.1 the ability to Web Scrape!
         self.agent_executor = create_react_agent(self.llm, swarm_tools)

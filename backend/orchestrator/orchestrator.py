@@ -16,6 +16,7 @@ from agents.sponsor_agent import SponsorAgent
 from agents.comms_agent import CommsAgent
 from agents.design_agent import DesignAgent
 from agents.resource_agent import ResourceAgent
+from config import get_resilient_llm
 
 from orchestrator.workflow_graph import build_graph, Context
 from tools.csv_parser import parse_messy_csv
@@ -48,7 +49,7 @@ class EventOrchestrator:
         )
         
         self.user_context = Context(user_id="user_anmol") 
-        self.llm = ChatOpenAI(model=CLOUD_MODEL, base_url=OLLAMA_BASE_URL, api_key=OPENAI_API_KEY, temperature=0)
+        self.llm = get_resilient_llm(temperature=0)
 
     def get_thread_history(self):
         db_path = os.path.join(os.getcwd(), "memory", "swarm_threads.sqlite")
