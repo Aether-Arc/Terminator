@@ -432,16 +432,30 @@ export default function Dashboard({ params }: { params: { id: string } }) {
           </section>
 
           {/* MARKETING PANEL */}
+          {/* MARKETING PANEL */}
           <section>
             <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><MessageSquare size={14} /> Social & Marketing</h3>
             <div className="space-y-4">
               {outputs.marketing?.length === 0 && <p className="text-sm text-slate-400 italic text-center p-4">No marketing assets yet.</p>}
-              {outputs.marketing?.map((item: any, i: number) => (
-                <div key={i} className="p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100 shadow-sm">
-                  <div className="text-xs font-bold text-indigo-500 mb-3 bg-indigo-100 inline-block px-2.5 py-1 rounded-md">{item.task}</div>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{item.output}</p>
-                </div>
-              ))}
+              
+              {outputs.marketing?.map((item: any, i: number) => {
+                // 🚀 FIXED: Check if the output is an object (like an error state) to prevent React crashes
+                const isObject = typeof item.output === 'object' && item.output !== null;
+
+                return (
+                  <div key={i} className="p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100 shadow-sm">
+                    <div className="text-xs font-bold text-indigo-500 mb-3 bg-indigo-100 inline-block px-2.5 py-1 rounded-md">{item.task}</div>
+                    
+                    {isObject ? (
+                      <pre className="text-[11px] text-red-500 font-mono whitespace-pre-wrap leading-relaxed">
+                        {JSON.stringify(item.output, null, 2)}
+                      </pre>
+                    ) : (
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{item.output}</p>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </section>
 

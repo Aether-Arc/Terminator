@@ -1,166 +1,276 @@
 import json
+import random
 from pydantic import BaseModel, Field
 from typing import List
 from langchain_core.prompts import ChatPromptTemplate
 from config import get_resilient_llm
 
-# ==========================================
-# ✅ PYDANTIC SCHEMA
-# ==========================================
+
+# =========================
+# MEMORY FILE
+# =========================
+
+MEMORY_FILE = "schedule_memory.json"
+
+
+def load_memory():
+    try:
+        with open(MEMORY_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+
+def save_memory(mem):
+    with open(MEMORY_FILE, "w") as f:
+        json.dump(mem[-5:], f, indent=2)  # keep last 5 schedules
+
+
+# =========================
+# PYDANTIC
+# =========================
+
 class ScheduledSession(BaseModel):
-    session: str = Field(
-        description="Name of the event session. CRITICAL: DO NOT put time ranges or timestamps in this field."
-    )
-    time: str = Field(
-        description="Example: Day 1 | 9:00 AM - 10:00 AM or Day 2 | 2:00 PM - 3:30 PM"
-    )
-    status: str = Field(
-        default="Locked",
-        description="Always Locked"
-    )
+    session: str
+    time: str
+    status: str = "Locked"
+
 
 class EventSchedule(BaseModel):
-    schedule: List[ScheduledSession] = Field(
-        description="Full ordered schedule"
-    )
+    schedule: List[ScheduledSession]
 
-# ==========================================
-# ✅ SCHEDULER AGENT
-# ==========================================
+
+# =========================
+# SCHEDULER
+# =========================
+
 class SchedulerAgent:
+
     def __init__(self):
-        # Structured output prevents bad JSON
-        self.llm = get_resilient_llm(temperature=0.2).with_structured_output(EventSchedule)
+        self.llm = get_resilient_llm(
+            temperature=0.35  # randomness for variation
+        ).with_structured_output(EventSchedule)
 
-    # ==========================================
-    # MAIN SCHEDULER
-    # ==========================================
+    # =========================
+    # DAY TEMPLATE GENERATOR
+    # =========================
+
+    def get_day_template(self):
+
+        templates = [
+
+            "competition + fun + show",
+
+            "talk + competition + cultural",
+
+            "games + workshop + concert",
+
+            "tech + social + entertainment",
+
+            "community + challenge + show",
+
+            "sports + tech + music",
+
+            "creative + competition + social",
+
+        ]
+
+        return random.choice(templates)
+
+    # =========================
+    # MAIN
+    # =========================
+
     async def create_schedule(self, best_plan):
-        original_sessions = best_plan.get("sessions", [])
 
-        if not original_sessions:
-            return [{"error": "No sessions provided"}]
+        sessions = best_plan.get("sessions", [])
+        session_names = [s["name"] for s in sessions]
 
-        session_names = [s.get("name", "Session") for s in original_sessions]
-        user_constraints = best_plan.get("user_constraints", "None")
-        
-        # 🚀 PULL EXTRACTED DURATION DIRECTLY FROM THE PLANNER
-        event_duration = best_plan.get("duration", "1 day")
+        duration = best_plan.get("duration", "1 day")
+        constraints = best_plan.get("user_constraints", "")
+        event_type = best_plan.get("event_type", "festival")
 
-        # ======================================
-        # CONTEXT DETECTION
-        # ======================================
-        context_str = (str(session_names) + " " + str(user_constraints) + " " + str(event_duration)).lower()
+        memory = load_memory()
 
-        # 🚀 STRICT HACKATHON CHECK: Must be a hackathon AND indicate it spans >24 hours
-        is_continuous_overnight = (
-            ("hackathon" in context_str or "overnight" in context_str) and
-            ("24" in context_str or "48" in context_str or "day" in context_str or "continuous" in context_str)
+        context = (str(session_names) + str(duration)).lower()
+
+        # ----------------------
+        # overnight detection
+        # ----------------------
+
+        is_overnight = (
+            "hackathon" in context
+            and ("24h" in context or "48h" in context or "overnight" in context)
         )
 
-        # ======================================
-        # TIME RULES & BIOLOGICAL NEEDS
-        # ======================================
-        if is_continuous_overnight:
+        # ----------------------
+        # day template
+        # ----------------------
+
+        template = self.get_day_template()
+
+        # ----------------------
+        # time rules
+        # ----------------------
+
+        if is_overnight:
+
             time_rules = f"""
-            EVENT DURATION: {event_duration}
-            
-            RULES FOR THIS CONTINUOUS HACKATHON:
-            - This is a continuous overnight event. Sessions MAY run overnight and cross midnight.
-            - Use format: Day 1 | 10:00 PM - Day 2 | 6:00 AM
-            - YOU MUST ADD LOGICAL HUMAN BREAKS:
-              * Lunch Break (~1:00 PM)
-              * Dinner Break (~7:00 PM)
-              * Midnight Snack/Energy Break (~12:00 AM or 1:00 AM)
-            - Spread the sessions logically across the entire {event_duration}.
-            """
+Continuous hackathon allowed.
+
+Sessions may cross midnight.
+
+Still must add:
+Lunch
+Dinner
+Energy break
+Sleep break
+
+Do not spam hackathon.
+Only one long hackathon allowed.
+"""
+
         else:
+
             time_rules = f"""
-            EVENT DURATION: {event_duration}
-            
-            RULES FOR THIS STANDARD EVENT:
-            - STRICT OPERATING HOURS: 9:00 AM to 8:00 PM ONLY per day.
-            - ABSOLUTELY NO SESSIONS can be scheduled before 9:00 AM or after 8:00 PM. 
-            - If you run out of time on Day 1, you MUST overflow and push the remaining sessions to Day 2 starting at 9:00 AM.
-            - YOU MUST ADD LOGICAL HUMAN BREAKS EVERY DAY:
-              * Lunch Break (~12:30 PM - 1:30 PM)
-              * Dinner Break (If event runs until 8:00 PM, add dinner ~6:30 PM)
-              * Short 15-30 minute rest/coffee breaks between intense sessions.
-            - Spread the sessions out chronologically to fit the {event_duration}.
-            """
+STRICT FESTIVAL RULES
 
-        # ======================================
-        # PROMPT
-        # ======================================
-        prompt = ChatPromptTemplate.from_messages([
-            (
-                "system",
-                """
-You are an ELITE EVENT LOGISTICS AI.
-Create a perfect professional chronological schedule.
+Allowed time per day:
+9:00 AM → 8:30 PM
 
-USER CONSTRAINTS:
-{constraints}
+NO session outside this.
+
+Add daily:
+
+Lunch ~1 PM
+Tea ~4:30 PM
+Dinner ~7 PM optional
+
+Session limits:
+
+normal 1–2h
+competition 2–3h
+show max 3h
+talk 1–2h
+break 30–60m
+
+Each day must feel like festival.
+"""
+
+        # ----------------------
+        # memory text
+        # ----------------------
+
+        memory_text = json.dumps(memory[-2:], indent=2)
+
+        # ----------------------
+        # prompt
+        # ----------------------
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    """
+You are ELITE FESTIVAL SCHEDULER AI.
+
+Create realistic college fest schedules like:
+
+Mood Indigo
+Techfest IIT
+NIT fests
+College cultural fests
+
+RULES:
 
 {time_rules}
 
+EVENT TYPE:
+{event_type}
+
+DAY TEMPLATE:
+{template}
+
+MEMORY OF OLD SCHEDULES:
+{memory}
+
 ==========================
-STRICT RULES
+FESTIVAL STRUCTURE
 ==========================
-1. No overlaps.
-2. No gaps unless it is a creatively named break, meal, or transition.
-3. Respect the duration. Spread events out intelligently across the days.
-4. Keep names EXACT. Do not modify the creative session names given to you by the Planner. You may only insert your own names for Meals/Breaks (e.g. "Networking Lunch").
-5. CRITICAL AVOIDANCE: The `session` field MUST ONLY contain the text name of the session. NEVER put timestamps (like 9:00 AM - 9:30 AM) in the session string!
+
+Each day must include mix:
+
+competition
+fun
+cultural
+social
+show
+break
+
+No generic template.
+
+Do NOT repeat same pattern as memory.
+
+Do NOT spam hackathon.
+
+Do NOT spam break.
+
+Keep planner names EXACT.
+
+Add your own break names only.
+
+Examples of good breaks:
+
+Networking Lunch
+Tea Recharge
+Evening Chill Break
+Dinner Connect
 
 ==========================
 FORMAT
-==========================
-Use format: Day X | start - end
-Examples:
-Day 1 | 9:00 AM - 10:30 AM
-Day 1 | 12:30 PM - 1:30 PM (Networking Lunch)
-Day 2 | 11:00 AM - 1:00 PM
 
-Return structured output only.
+Day X | 9:00 AM - 10:30 AM
+
+No overlaps.
+No midnight unless hackathon.
+No empty days.
+
+Return structured only.
 """
-            ),
-            (
-                "user",
-                """
-Schedule these sessions chronologically across {duration}, adding breaks and meals where natural:
+                ),
+                (
+                    "user",
+                    """
+Duration:
+{duration}
 
+Sessions:
 {sessions}
-"""
-            )
-        ])
 
-        print(f"[*] SchedulerAgent running (Continuous Overnight={is_continuous_overnight}, Duration={event_duration})")
+User constraints:
+{constraints}
+"""
+                ),
+            ]
+        )
+
         chain = prompt | self.llm
 
-        try:
-            result: EventSchedule = await chain.ainvoke({
-                "constraints": user_constraints,
-                "time_rules": time_rules,
+        result: EventSchedule = await chain.ainvoke(
+            {
                 "sessions": ", ".join(session_names),
-                "duration": event_duration
-            })
+                "duration": duration,
+                "constraints": constraints,
+                "time_rules": time_rules,
+                "template": template,
+                "memory": memory_text,
+                "event_type": event_type,
+            }
+        )
 
-            return [s.model_dump() for s in result.schedule]
+        schedule = [s.model_dump() for s in result.schedule]
 
-        except Exception as e:
-            print("[Scheduler Error]", e)
-            return [
-                {
-                    "session": s,
-                    "time": "Day 1 | TBD",
-                    "status": "Pending"
-                }
-                for s in session_names
-            ]
+        memory.append(schedule)
+        save_memory(memory)
 
-    # ==========================================
-    # CRISIS RECALC
-    # ==========================================
-    def recalculate(self, crisis_solution):
-        return {"status": "Recalculated"}
+        return schedule

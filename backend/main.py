@@ -298,3 +298,41 @@ async def api_approve(data: dict):
         return await orchestrator.resume_workflow(thread_id, {"action": "approve"}, swarm_streamer)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/generate_itinerary")
+async def generate_itinerary(data: dict):
+    """Bypasses the graph router and directly commands the ItineraryAgent to expand the schedule."""
+    try:
+        thread_id = urllib.parse.unquote(data.get("thread_id", ""))
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # 1. Get the current memory state
+        state = orchestrator.graph.get_state(config)
+        event_data = state.values.get("event_data", {})
+        schedule = state.values.get("schedule", [])
+        agent_outputs = state.values.get("agent_outputs", {})
+        
+        # 2. Force the Itinerary Agent to run directly
+        detailed_schedule = await orchestrator.itinerary.expand_schedule(event_data, schedule)
+        
+        # 3. Save the results back into the LangGraph state
+        if "operations" not in agent_outputs:
+            agent_outputs["operations"] = []
+            
+        # Clean out any old itinerary attempts
+        agent_outputs["operations"] = [w for w in agent_outputs["operations"] if w.get("domain") != "itinerary"]
+        
+        # Append the new success
+        agent_outputs["operations"].append({
+            "domain": "itinerary", 
+            "task": "Expand Base Schedule", 
+            "output": detailed_schedule
+        })
+        
+        orchestrator.graph.update_state(config, {"agent_outputs": agent_outputs})
+        return {"status": "success"}
+        
+    except Exception as e:
+        print(f"[❌] Itinerary Generation Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
