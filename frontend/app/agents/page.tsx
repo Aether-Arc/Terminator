@@ -3,9 +3,9 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createEvent, approvePlan, simulateCrisis, fetchHistory, forkEvent, fetchThreadState, sendChatCommand } from '../../lib/api'
 import AgentMonitor from '../../components/AgentMonitor'
-import MonteCarloChart from '../../components/MonteCarloChart'
 import PipelineTracker, { NodeStatus } from '../../components/PipelineTracker'
-import { Play, CheckCircle, AlertTriangle, FastForward, Server, Mail, Calendar, Share2, MessageSquare, History, Send, Plus, Edit3, LayoutTemplate, Terminal } from 'lucide-react'
+// 🚀 Added GitBranch for the Fork button
+import { Play, CheckCircle, AlertTriangle, FastForward, Server, Mail, Calendar, Share2, MessageSquare, History, Send, Plus, Edit3, LayoutTemplate, Terminal, GitBranch } from 'lucide-react'
 
 export default function AgentsPage() {
   const router = useRouter()
@@ -149,26 +149,22 @@ export default function AgentsPage() {
     setStatus("EXECUTING")
     setNodeStatuses(prev => ({ ...prev, Human_review: "completed", Execution_phase: "running" }))
     
-    // 1. Safely validate the JSON first
     let editedScheduleJson;
     try {
       editedScheduleJson = JSON.parse(scheduleStr)
     } catch (e) {
       alert("Invalid JSON format in schedule! Please fix the brackets/quotes before approving.")
       setStatus("AWAITING_APPROVAL")
-      return; // Stop execution if JSON is actually bad
+      return; 
     }
 
-    // 2. Send the approval to the Backend WITH the thread_id
     try {
-      // 🚀 THE FIX: Explicitly attach the activeThread as the thread_id!
       const result = await approvePlan({ 
         ...eventData, 
         thread_id: activeThread, 
         edited_plan: editedScheduleJson 
       })
       
-      // Update the UI with the final generated assets
       if (result.agent_outputs?.marketing) {
          setMarketing(Array.isArray(result.agent_outputs.marketing) ? result.agent_outputs.marketing.map((m: any) => `[${m.task || m.domain}]\n${m.output || m.copy}`).join("\n\n") : result.agent_outputs.marketing);
       }
@@ -177,7 +173,6 @@ export default function AgentsPage() {
       setStatus("COMPLETED")
       setNodeStatuses(prev => ({ ...prev, Execution_phase: "completed" }))
 
-      // Save the finalized data to local storage for the Dashboard
       const finalManifest = {
         event_name: eventData?.name,
         schedule: editedScheduleJson, 
@@ -232,17 +227,14 @@ export default function AgentsPage() {
     e.preventDefault()
     if (!chatInput || !activeThread) return;
 
-    // 🚀 Update UI to show the Swarm is thinking
     setStatus("EXECUTING")
     setNodeStatuses(prev => ({ ...prev, Human_review: "completed", Execution_phase: "running" }))
     const input = chatInput;
     setChatInput("")
 
     try {
-      // 🚀 THE FIX: Call the Smart Brain (resume_workflow) instead of the Time Machine!
       const result = await sendChatCommand(activeThread, input)
 
-      // Update the UI with the surgically edited JSON
       if (result.schedule) {
         setSchedule(result.schedule)
         setScheduleStr(JSON.stringify(result.schedule, null, 2))
@@ -258,7 +250,6 @@ export default function AgentsPage() {
          }
       }
 
-      // Pause the graph again so the human can review the changes!
       setStatus("AWAITING_APPROVAL") 
       setNodeStatuses(prev => ({ ...prev, Execution_phase: "completed", Human_review: "running" }))
       
@@ -269,7 +260,52 @@ export default function AgentsPage() {
     }
   }
 
-  // Helper for status badge styles
+  // 🚀 THE FIX: New Time Machine / Fork Functionality
+  const handleForkEvent = async () => {
+    if (!chatInput || !activeThread) return;
+    
+    setStatus("PLANNING")
+    setNodeStatuses({ Planner: "running", Scheduler: "waiting", Human_review: "waiting", Execution_phase: "waiting" })
+    setLogs(prev => [...prev, { agent: "System", action: `Branching timeline from ${activeThread}...`, status: "warning" }])
+    
+    const input = chatInput;
+    setChatInput("")
+
+    try {
+      // Direct call to your backend fork endpoint
+      const res = await fetch('http://localhost:8000/fork_event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thread_id: activeThread, new_prompt: input })
+      });
+      
+      if (!res.ok) throw new Error("Failed to fork event");
+      const result = await res.json();
+
+      // Switch to the brand new thread id
+      setActiveThread(result.thread_id) 
+      setSchedule(result.schedule)
+      setScheduleStr(JSON.stringify(result.schedule, null, 2))
+
+      if (result.marketing) {
+         setMarketing(Array.isArray(result.marketing) ? result.marketing.map((m: any) => `[${m.task}]\n${m.output}`).join("\n\n") : result.marketing);
+      }
+      if (result.email_outreach_logs) {
+         setEmailLogs(result.email_outreach_logs);
+      }
+
+      setStatus("AWAITING_APPROVAL")
+      setNodeStatuses(prev => ({ ...prev, Scheduler: "completed", Human_review: "running" }))
+
+      // Update sidebar
+      fetchHistory().then(res => setHistoryThreads(res?.threads || []))
+    } catch (e) {
+      console.error(e)
+      setStatus("AWAITING_APPROVAL")
+      alert("Failed to fork timeline. See console.")
+    }
+  }
+
   const getStatusStyles = (currentStatus: string) => {
     switch(currentStatus) {
       case 'COMPLETED': return 'bg-emerald-100 text-emerald-700 border-emerald-200'
@@ -319,8 +355,8 @@ export default function AgentsPage() {
             <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-100">
               <Server className="text-indigo-500" size={22} />
             </div>
-            <h1 className="text-2xl text-slate-900 font-extrabold tracking-tight">
-              EventOS <span className="text-slate-400 font-normal mx-2">/</span> <span className="text-indigo-600 font-semibold">{activeThread || "Initializing..."}</span>
+            <h1 className="text-2xl text-slate-900 font-extrabold tracking-tight truncate max-w-[400px]">
+              EventOS <span className="text-slate-400 font-normal mx-2">/</span> <span className="text-indigo-600 font-semibold truncate">{activeThread || "Initializing..."}</span>
             </h1>
             <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${getStatusStyles(status)} ml-2`}>
               {status.replace("_", " ")}
@@ -443,9 +479,28 @@ export default function AgentsPage() {
               placeholder="e.g. 'Rewind and change the budget to $20k' or 'Push the keynote back 2 hours...'"
               className="flex-1 bg-transparent border-none outline-none text-slate-800 text-sm px-4 placeholder:text-slate-400"
             />
-            <button type="submit" disabled={status === "PLANNING"} className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center">
-              <Send size={16} />
-            </button>
+            
+            {/* 🚀 THE FIX: Fork Timeline Button */}
+            <div className="flex gap-2 border-l border-slate-200 pl-4">
+              <button 
+                type="button" 
+                onClick={handleForkEvent} 
+                disabled={status === "PLANNING" || !chatInput.trim()} 
+                className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl hover:bg-slate-200 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium text-sm"
+                title="Branch this conversation into a completely new event thread"
+              >
+                <GitBranch size={16} className="text-slate-500" /> Fork Timeline
+              </button>
+
+              <button 
+                type="submit" 
+                disabled={status === "PLANNING" || !chatInput.trim()} 
+                className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center"
+                title="Apply changes to the current thread"
+              >
+                <Send size={16} />
+              </button>
+            </div>
           </form>
         </div>
 

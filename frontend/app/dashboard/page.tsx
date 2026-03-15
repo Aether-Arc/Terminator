@@ -1,6 +1,6 @@
 "use client"
-import { useState, useEffect } from 'react'
-import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Terminal, Sparkles, LayoutTemplate, Briefcase } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Terminal, Sparkles, LayoutTemplate, Briefcase, Bell } from 'lucide-react'
 import Link from 'next/link'
 import { fetchHistory } from '../../lib/api'
 
@@ -14,6 +14,9 @@ export default function Dashboard({ params }: { params: { id: string } }) {
   const [messages, setMessages] = useState<{ role: string, content: string }[]>([
     { role: 'ai', content: 'Hello! I am your Event Intelligence Agent. How can we adjust the current plan?' }
   ])
+  
+  // 🚀 FIX 2: Added Auto-Notify State
+  const [autoNotify, setAutoNotify] = useState(false)
 
   // Workspace State
   const [schedule, setSchedule] = useState<any[]>([])
@@ -21,18 +24,20 @@ export default function Dashboard({ params }: { params: { id: string } }) {
   const [status, setStatus] = useState("AWAITING_APPROVAL")
   const [isEditing, setIsEditing] = useState(false)
 
-  // Load history on mount
+  // 🚀 FIX 1: WebSocket State for Real-Time Streaming
+  const ws = useRef<WebSocket | null>(null)
+  const [liveAction, setLiveAction] = useState("Analyzing request...")
+
+  // Load history & initialize WebSocket on mount
   useEffect(() => {
     fetchHistory()
       .then(res => {
         if (res && res.threads) {
-          // Format the raw strings into nice objects for the sidebar
           const historyList = res.threads.map((t: string) => ({
             id: t,
             title: `Thread (${t.substring(0, 8)})`
           }));
 
-          // Show current thread at top, followed by history
           setThreads([
             { id: params.id, title: "Current Active Plan" },
             ...historyList.filter((t: any) => t.id !== params.id)
@@ -40,6 +45,17 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         }
       })
       .catch(err => console.error("Could not fetch history", err));
+
+    // 🚀 FIX 1: Attach WebSocket to stream Agent activity to the Dashboard
+    ws.current = new WebSocket("ws://localhost:8000/ws/swarm")
+    ws.current.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (data.action || data.message) {
+        setLiveAction(`[${data.agent || "System"}] ${data.action || data.message}`)
+      }
+    }
+
+    return () => ws.current?.close()
   }, [params.id])
 
   // Handles Chat Submission
@@ -53,13 +69,15 @@ export default function Dashboard({ params }: { params: { id: string } }) {
     // Add User Message to Chat
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setStatus("PROCESSING_UPDATE");
+    setLiveAction("Connecting to Swarm..."); // Reset live text
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         body: JSON.stringify({
           thread_id: params.id,
-          payload: { action: "prompt", message: userMessage }
+          // 🚀 FIX 2: Inject the auto_notify flag into the backend!
+          payload: { action: "prompt", message: userMessage, auto_notify: autoNotify }
         })
       });
       const data = await res.json();
@@ -67,7 +85,12 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       if (data.schedule) setSchedule(data.schedule);
       if (data.agent_outputs) setOutputs(data.agent_outputs);
 
-      setMessages(prev => [...prev, { role: 'ai', content: data.reply || "I've updated the workspace based on your request. Please review the changes on the right." }]);
+      // 🚀 FIX 3: Replaced the "Ghost Reply" with the actual Backend Audit Log
+      const aiReply = data.audit_log && data.audit_log.length > 0 
+        ? data.audit_log[data.audit_log.length - 1] 
+        : data.reply || "Workspace successfully updated.";
+
+      setMessages(prev => [...prev, { role: 'ai', content: aiReply }]);
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', content: "Sorry, there was an error updating the event." }]);
     }
@@ -169,20 +192,39 @@ export default function Dashboard({ params }: { params: { id: string } }) {
           ))}
           {status === "PROCESSING_UPDATE" && (
             <div className="flex justify-start">
-              <div className="bg-white text-slate-500 p-4 rounded-2xl rounded-bl-none text-sm border border-slate-200 shadow-sm flex items-center gap-3">
+              <div className="bg-white text-slate-600 p-4 rounded-2xl rounded-bl-none text-sm border border-slate-200 shadow-sm flex items-center gap-3">
                 <span className="flex gap-1">
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce"></span>
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce delay-75"></span>
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce delay-150"></span>
                 </span>
-                Updating workspace...
+                {/* 🚀 FIX 1: Stream live websocket text here */}
+                <span className="font-mono text-xs text-indigo-600 font-medium">{liveAction}</span>
               </div>
             </div>
           )}
         </div>
 
-        {/* Chat Input */}
-        <div className="p-4 bg-white border-t border-slate-100">
+        {/* Chat Input Area */}
+        <div className="p-4 bg-white border-t border-slate-100 flex flex-col gap-3">
+          
+          {/* 🚀 FIX 2: Auto-Notify Toggle Switch */}
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-1.5 text-slate-400">
+               <Bell size={12} className={autoNotify ? 'text-emerald-500' : ''} />
+               <span className="text-[10px] font-bold uppercase tracking-wider">Alerts</span>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <span className={`text-xs font-semibold transition-colors ${autoNotify ? 'text-emerald-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
+                Auto-Notify Participants
+              </span>
+              <div className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${autoNotify ? 'bg-emerald-500' : 'bg-slate-200'}`}>
+                <input type="checkbox" className="sr-only" checked={autoNotify} onChange={() => setAutoNotify(!autoNotify)} disabled={status === "PROCESSING_UPDATE" || isEditing} />
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${autoNotify ? 'translate-x-4' : 'translate-x-1'}`} />
+              </div>
+            </label>
+          </div>
+
           <form onSubmit={handleChat} className="flex items-center gap-3 bg-slate-50 border border-slate-200 p-2 rounded-2xl focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
             <input
               value={chatInput}
@@ -287,6 +329,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
               ))}
             </div>
           </section>
+          
           {/* OPERATIONS & LOGISTICS PANEL (Budget, Volunteer, Sponsor, Resource) */}
           <section className="mt-8">
             <div className="flex justify-between items-center mb-4">
@@ -303,7 +346,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
               )}
 
               {outputs.operations?.map((item: any, i: number) => {
-                // Safely handle both JSON objects and plain text strings
                 const isObject = typeof item.output === 'object' && item.output !== null;
 
                 return (

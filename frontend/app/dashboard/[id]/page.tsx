@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, Sparkles, LayoutTemplate, Briefcase, Bell, BellOff, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { fetchHistory, fetchThreadState } from '../../../lib/api'
@@ -21,6 +21,10 @@ export default function Dashboard({ params }: { params: { id: string } }) {
   const [outputs, setOutputs] = useState<any>({ marketing: [], comms: [], operations: [] })
   const [status, setStatus] = useState("AWAITING_APPROVAL")
   const [isEditing, setIsEditing] = useState(false)
+
+  // 🚀 WebSocket State for Real-Time Streaming
+  const ws = useRef<WebSocket | null>(null)
+  const [liveAction, setLiveAction] = useState("Analyzing request...")
 
   // Load history and thread data on mount
   useEffect(() => {
@@ -55,9 +59,19 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         })
         .catch(err => console.error("Could not load thread data", err));
     }
+
+    // 🚀 Attach WebSocket to stream Agent activity to the Dashboard
+    ws.current = new WebSocket("ws://localhost:8000/ws/swarm")
+    ws.current.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (data.action || data.message) {
+        setLiveAction(`[${data.agent || "System"}] ${data.action || data.message}`)
+      }
+    }
+
+    return () => ws.current?.close()
   }, [params.id])
 
-  // Handles Chat Submission
   // Handles Chat Submission
   const handleChat = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +82,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setStatus("PROCESSING_UPDATE");
+    setLiveAction("Connecting to Swarm..."); // Reset live text
 
     try {
       const res = await fetch('http://localhost:8000/api/chat', {
@@ -84,7 +99,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       });
       const data = await res.json();
 
-      // 🚀 CRITICAL FIX: If the backend rejects the request, show the real error message!
+      // If the backend rejects the request, show the real error message!
       if (data.status === "error") {
         setMessages(prev => [...prev, { role: 'ai', content: data.message }]);
         setStatus("AWAITING_APPROVAL");
@@ -103,11 +118,16 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         operations: incomingOutputs.operations || prev.operations
       }));
 
-      const successMsg = autoNotify 
+      // 🚀 Fix: Use backend Audit Log for realistic AI replies, fallback to custom message
+      const defaultSuccessMsg = autoNotify 
         ? "Workspace updated and WhatsApp notifications have been automatically dispatched!"
         : "I've updated the workspace based on your request. Please review the changes.";
+        
+      const aiReply = data.audit_log && data.audit_log.length > 0 
+        ? data.audit_log[data.audit_log.length - 1] 
+        : data.reply || defaultSuccessMsg;
 
-      setMessages(prev => [...prev, { role: 'ai', content: data.status === "dispatched" ? "Communications dispatched successfully!" : successMsg }]);
+      setMessages(prev => [...prev, { role: 'ai', content: data.status === "dispatched" ? "Communications dispatched successfully!" : aiReply }]);
       setStatus(data.status === "dispatched" ? "COMPLETED" : "AWAITING_APPROVAL");
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', content: "Sorry, there was an error communicating with the swarm." }]);
@@ -235,13 +255,14 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce delay-75"></span>
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce delay-150"></span>
                 </span>
-                Updating workspace...
+                {/* 🚀 Stream live websocket text here */}
+                <span className="font-mono text-xs text-indigo-600 font-medium">{liveAction}</span>
               </div>
             </div>
           )}
         </div>
 
-        {/* 🚀 UPGRADED: Chat Input with Auto-Notify Toggle */}
+        {/* Chat Input with Auto-Notify Toggle */}
         <div className="p-4 bg-white border-t border-slate-100 flex flex-col gap-3">
           <div className="flex items-center justify-end px-2">
             <button 
@@ -305,7 +326,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
 
           {/* SCHEDULE PANEL */}
-          {/* 🚀 UPGRADED SCHEDULE PANEL (Timeline UI) */}
           <section>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
@@ -333,7 +353,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                   let timeOnly = item.time || "TBD";
                   let sessionName = item.session || "Event Session";
 
-                  // 🚀 FIX: Detect if the AI put the Day in "session" and the Event Name in "status"
                   const isSessionJustDay = /^Day\s*\d+$/i.test((item.session || "").trim());
                   
                   if (isSessionJustDay && item.status && item.status !== "Locked" && item.status !== "Pending") {
@@ -341,7 +360,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                     sessionName = item.status.trim();
                     timeOnly = item.time?.trim() || "TBD";
                   }
-                  // Standard format: "Day 1 | 10:00 AM" in the time field
                   else if (item.time && item.time.includes("|")) {
                     const parts = item.time.split("|");
                     const dayPartIndex = parts.findIndex(p => p.toLowerCase().includes("day"));
@@ -354,7 +372,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                       timeOnly = parts.slice(1).join("|").trim();
                     }
                   } 
-                  // Fallback: If AI puts "Day 1 - Session Name" in the session field
                   else if (item.session && item.session.match(/Day\s*\d+/i)) {
                     const match = item.session.match(/Day\s*\d+/i);
                     if (match) {
@@ -365,7 +382,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                   }
 
                   if (!grouped[day]) grouped[day] = [];
-                  // Pass the properly mapped variables into the group
                   grouped[day].push({ ...item, session: sessionName, timeOnly, originalIndex: index });
                 });
 
@@ -438,7 +454,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
             </div>
           </section>
 
-          {/* 🚀 COMMUNICATION HUB (Displays the CommsAgent Drafts) */}
+          {/* COMMUNICATION HUB */}
           <section>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2"><Mail size={14} /> Communication Hub</h3>
@@ -475,14 +491,12 @@ export default function Dashboard({ params }: { params: { id: string } }) {
           </section>
 
           {/* MARKETING PANEL */}
-          {/* MARKETING PANEL */}
           <section>
             <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><MessageSquare size={14} /> Social & Marketing</h3>
             <div className="space-y-4">
               {outputs.marketing?.length === 0 && <p className="text-sm text-slate-400 italic text-center p-4">No marketing assets yet.</p>}
               
               {outputs.marketing?.map((item: any, i: number) => {
-                // 🚀 FIXED: Check if the output is an object (like an error state) to prevent React crashes
                 const isObject = typeof item.output === 'object' && item.output !== null;
 
                 return (
@@ -502,7 +516,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
             </div>
           </section>
 
-          {/* OPERATIONS & LOGISTICS PANEL (Budget formatting safe) */}
+          {/* OPERATIONS & LOGISTICS PANEL */}
           <section className="mt-8">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
@@ -543,7 +557,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                     {/* Card Content Area */}
                     <div className="flex-1 bg-slate-50/50 rounded-xl p-4 border border-slate-100 overflow-y-auto max-h-[350px]">
                       
-                      {/* 💰 BUDGET UI */}
+                      {/* BUDGET UI */}
                       {domain === 'budget' && isObject ? (
                         <div className="space-y-4">
                           <div className="flex justify-between items-center bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-200 shadow-sm">
@@ -579,7 +593,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                         </div>
                       ) 
                       
-                      /* 🙋‍♂️ VOLUNTEER UI */
+                      /* VOLUNTEER UI */
                       : domain === 'volunteer' && isObject ? (
                         <div className="space-y-4">
                           <div className="flex justify-between items-center bg-blue-50 text-blue-800 p-4 rounded-xl border border-blue-200 shadow-sm">
@@ -601,11 +615,9 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                         </div>
                       )
 
-                      /* 🤝 SPONSOR UI */
-                      /* 🤝 SPONSOR UI */
+                      /* SPONSOR UI */
                       : domain === 'sponsor' && isObject ? (
                         <div className="space-y-4">
-                          {/* Pitch Email */}
                           <div className="bg-purple-50 text-purple-800 p-4 rounded-xl border border-purple-200 shadow-sm">
                             <h4 className="font-bold text-sm mb-2 flex items-center gap-2">
                               📧 {item.output.pitch_subject || "Sponsorship Pitch"}
@@ -613,7 +625,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                             <p className="text-xs opacity-80 whitespace-pre-wrap leading-relaxed">{item.output.pitch_body || "Please see our tiers below."}</p>
                           </div>
                           
-                          {/* Sponsorship Tiers */}
                           <div>
                             <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Sponsorship Tiers</h4>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -627,7 +638,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                             </div>
                           </div>
 
-                          {/* Target Companies */}
                           <div>
                             <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Target Companies</h4>
                             <div className="space-y-2">
@@ -642,7 +652,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                         </div>
                       )
 
-                      /* 🗺️ ITINERARY UI (Expands to full width) */
+                      /* ITINERARY UI */
                       : domain === 'itinerary' && Array.isArray(item.output) ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {item.output.map((event: any, idx: number) => (
@@ -658,7 +668,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                         </div>
                       )
 
-                      /* 🛑 RAW JSON FALLBACK (For any agent we haven't built a UI for yet) */
+                      /* RAW JSON FALLBACK */
                       : isObject ? (
                         <pre className="text-[11px] text-slate-600 font-mono whitespace-pre-wrap leading-relaxed">
                           {JSON.stringify(item.output, null, 2)}

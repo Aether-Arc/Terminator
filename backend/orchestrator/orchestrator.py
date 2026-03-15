@@ -108,7 +108,9 @@ class EventOrchestrator:
             "schedule": final_state.values.get("schedule"),
             "marketing": agent_outputs.get("marketing", []),
             "email_outreach_logs": agent_outputs.get("comms", []), 
-            "agent_outputs": agent_outputs
+            "agent_outputs": agent_outputs,
+            "requires_approval": bool(final_state.next) # <-- ADD THIS LINE
+        
         }
 
     async def resume_workflow(self, thread_id, payload, streamer):

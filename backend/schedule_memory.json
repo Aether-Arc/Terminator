@@ -3,379 +3,6 @@
     {
       "session": "Day 1",
       "time": "9:00 AM - 10:30 AM",
-      "status": "Tech Quiz Competition"
-    },
-    {
-      "session": "Day 1",
-      "time": "10:30 AM - 10:50 AM",
-      "status": "Morning Refresh Break"
-    },
-    {
-      "session": "Day 1",
-      "time": "10:50 AM - 1:00 PM",
-      "status": "Guest Lecture: Emerging Tech Trends"
-    },
-    {
-      "session": "Day 1",
-      "time": "1:00 PM - 2:00 PM",
-      "status": "Lunch"
-    },
-    {
-      "session": "Day 1",
-      "time": "2:00 PM - 4:00 PM",
-      "status": "Gaming Tournament"
-    },
-    {
-      "session": "Day 1",
-      "time": "4:00 PM - 4:30 PM",
-      "status": "Tea Break"
-    },
-    {
-      "session": "Day 1",
-      "time": "4:30 PM - 6:30 PM",
-      "status": "Cultural Dance Performance"
-    },
-    {
-      "session": "Day 1",
-      "time": "7:00 PM - 8:30 PM",
-      "status": "Comedy Night"
-    },
-    {
-      "session": "Day 2",
-      "time": "9:00 AM - 10:30 AM",
-      "status": "Hackathon"
-    },
-    {
-      "session": "Day 2",
-      "time": "10:30 AM - 10:50 AM",
-      "status": "Recharge Break"
-    },
-    {
-      "session": "Day 2",
-      "time": "10:50 AM - 1:00 PM",
-      "status": "Workshop: AI and Machine Learning"
-    },
-    {
-      "session": "Day 2",
-      "time": "1:00 PM - 2:00 PM",
-      "status": "Lunch"
-    },
-    {
-      "session": "Day 2",
-      "time": "2:00 PM - 4:00 PM",
-      "status": "Social Impact Panel Discussion"
-    },
-    {
-      "session": "Day 2",
-      "time": "4:00 PM - 4:30 PM",
-      "status": "Evening Chill Break"
-    },
-    {
-      "session": "Day 2",
-      "time": "4:30 PM - 6:30 PM",
-      "status": "Music Competition"
-    },
-    {
-      "session": "Day 2",
-      "time": "7:00 PM - 8:30 PM",
-      "status": "Dinner and Networking"
-    },
-    {
-      "session": "Day 3",
-      "time": "9:00 AM - 10:30 AM",
-      "status": "Technical Paper Presentation"
-    },
-    {
-      "session": "Day 3",
-      "time": "10:30 AM - 10:50 AM",
-      "status": "Morning Connect Break"
-    },
-    {
-      "session": "Day 3",
-      "time": "10:50 AM - 1:00 PM",
-      "status": "Innovative Project Showcase"
-    },
-    {
-      "session": "Day 3",
-      "time": "1:00 PM - 2:00 PM",
-      "status": "Lunch"
-    },
-    {
-      "session": "Day 3",
-      "time": "2:00 PM - 4:00 PM",
-      "status": "Cultural Fashion Show"
-    },
-    {
-      "session": "Day 3",
-      "time": "4:00 PM - 4:30 PM",
-      "status": "Tea Break"
-    },
-    {
-      "session": "Day 3",
-      "time": "4:30 PM - 6:30 PM",
-      "status": "Awards and Recognition Ceremony"
-    },
-    {
-      "session": "Day 3",
-      "time": "7:00 PM - 8:30 PM",
-      "status": "Closing Ceremony and Farewell"
-    }
-  ],
-  [
-    {
-      "session": "Day 1",
-      "time": "9:00 AM - 10:30 AM",
-      "status": "CodeStorm Arena"
-    },
-    {
-      "session": "Day 1",
-      "time": "10:30 AM - 10:50 AM",
-      "status": "Recharge Break"
-    },
-    {
-      "session": "Day 1",
-      "time": "10:50 AM - 1:00 PM",
-      "status": "Innovation Lab"
-    },
-    {
-      "session": "Day 1",
-      "time": "1:00 PM - 2:00 PM",
-      "status": "Lunch"
-    },
-    {
-      "session": "Day 1",
-      "time": "2:00 PM - 4:00 PM",
-      "status": "Clash Campus Carnival"
-    },
-    {
-      "session": "Day 1",
-      "time": "4:00 PM - 4:30 PM",
-      "status": "Tea Break"
-    },
-    {
-      "session": "Day 1",
-      "time": "4:30 PM - 6:30 PM",
-      "status": "Talent Showdown"
-    },
-    {
-      "session": "Day 1",
-      "time": "7:00 PM - 8:30 PM",
-      "status": "Dinner and Community Impact Lab"
-    },
-    {
-      "session": "Day 2",
-      "time": "9:00 AM - 10:30 AM",
-      "status": "Startup Pitch"
-    },
-    {
-      "session": "Day 2",
-      "time": "10:30 AM - 10:50 AM",
-      "status": "Networking Break"
-    },
-    {
-      "session": "Day 2",
-      "time": "10:50 AM - 1:00 PM",
-      "status": "RoboWar Trials"
-    },
-    {
-      "session": "Day 2",
-      "time": "1:00 PM - 2:00 PM",
-      "status": "Lunch"
-    },
-    {
-      "session": "Day 2",
-      "time": "2:00 PM - 4:00 PM",
-      "status": "CodeStorm Arena Finals"
-    },
-    {
-      "session": "Day 2",
-      "time": "4:00 PM - 4:30 PM",
-      "status": "Evening Chill Break"
-    },
-    {
-      "session": "Day 2",
-      "time": "4:30 PM - 6:30 PM",
-      "status": "Talent Showdown Finals"
-    },
-    {
-      "session": "Day 2",
-      "time": "7:00 PM - 8:30 PM",
-      "status": "Closing Ceremony and Prize Distribution"
-    }
-  ],
-  [
-    {
-      "session": "Day 1",
-      "time": "9:00 AM - 10:30 AM",
-      "status": "CodeStorm Arena"
-    },
-    {
-      "session": "Day 1",
-      "time": "10:30 AM - 10:50 AM",
-      "status": "Networking Lunch Break"
-    },
-    {
-      "session": "Day 1",
-      "time": "10:50 AM - 12:50 PM",
-      "status": "Innovation Lab"
-    },
-    {
-      "session": "Day 1",
-      "time": "12:50 PM - 1:50 PM",
-      "status": "Tea Recharge Break"
-    },
-    {
-      "session": "Day 1",
-      "time": "1:50 PM - 3:50 PM",
-      "status": "Startup Pitch"
-    },
-    {
-      "session": "Day 1",
-      "time": "3:50 PM - 4:10 PM",
-      "status": "Afternoon Connect Break"
-    },
-    {
-      "session": "Day 1",
-      "time": "4:10 PM - 6:10 PM",
-      "status": "Community Impact Lab"
-    },
-    {
-      "session": "Day 1",
-      "time": "6:10 PM - 7:10 PM",
-      "status": "Dinner Connect Break"
-    },
-    {
-      "session": "Day 1",
-      "time": "7:10 PM - 8:30 PM",
-      "status": "RoboWar Trials"
-    }
-  ],
-  [
-    {
-      "session": "Day 1",
-      "time": "9:00 AM - 10:30 AM",
-      "status": "CodeStorm Arena"
-    },
-    {
-      "session": "Day 1",
-      "time": "10:30 AM - 10:50 AM",
-      "status": "Morning Buzz Break"
-    },
-    {
-      "session": "Day 1",
-      "time": "10:50 AM - 1:00 PM",
-      "status": "Innovation Lab"
-    },
-    {
-      "session": "Day 1",
-      "time": "1:00 PM - 2:00 PM",
-      "status": "Lunch"
-    },
-    {
-      "session": "Day 1",
-      "time": "2:00 PM - 4:00 PM",
-      "status": "Street Games Carnival"
-    },
-    {
-      "session": "Day 1",
-      "time": "4:00 PM - 4:30 PM",
-      "status": "Tea Recharge Break"
-    },
-    {
-      "session": "Day 1",
-      "time": "4:30 PM - 6:30 PM",
-      "status": "Talent Showdown"
-    },
-    {
-      "session": "Day 1",
-      "time": "7:00 PM - 8:30 PM",
-      "status": "Fusion Night"
-    },
-    {
-      "session": "Day 2",
-      "time": "9:00 AM - 10:30 AM",
-      "status": "Startup Pitch"
-    },
-    {
-      "session": "Day 2",
-      "time": "10:30 AM - 10:50 AM",
-      "status": "Networking Connect Break"
-    },
-    {
-      "session": "Day 2",
-      "time": "10:50 AM - 1:00 PM",
-      "status": "RoboWar Trials"
-    },
-    {
-      "session": "Day 2",
-      "time": "1:00 PM - 2:00 PM",
-      "status": "Lunch"
-    },
-    {
-      "session": "Day 2",
-      "time": "2:00 PM - 4:00 PM",
-      "status": "Clash Campus Carnival"
-    },
-    {
-      "session": "Day 2",
-      "time": "4:00 PM - 4:30 PM",
-      "status": "Evening Chill Break"
-    },
-    {
-      "session": "Day 2",
-      "time": "4:30 PM - 6:30 PM",
-      "status": "Battle of Bands"
-    },
-    {
-      "session": "Day 2",
-      "time": "7:00 PM - 8:30 PM",
-      "status": "Community Impact Lab"
-    },
-    {
-      "session": "Day 3",
-      "time": "9:00 AM - 10:30 AM",
-      "status": "CodeStorm Arena Finals"
-    },
-    {
-      "session": "Day 3",
-      "time": "10:30 AM - 10:50 AM",
-      "status": "Morning Energize Break"
-    },
-    {
-      "session": "Day 3",
-      "time": "10:50 AM - 1:00 PM",
-      "status": "Innovation Lab Workshop"
-    },
-    {
-      "session": "Day 3",
-      "time": "1:00 PM - 2:00 PM",
-      "status": "Lunch"
-    },
-    {
-      "session": "Day 3",
-      "time": "2:00 PM - 4:00 PM",
-      "status": "Street Games Carnival Finals"
-    },
-    {
-      "session": "Day 3",
-      "time": "4:00 PM - 4:30 PM",
-      "status": "Tea Refresh Break"
-    },
-    {
-      "session": "Day 3",
-      "time": "4:30 PM - 6:30 PM",
-      "status": "Talent Showdown Finals"
-    },
-    {
-      "session": "Day 3",
-      "time": "7:00 PM - 8:30 PM",
-      "status": "Closing Ceremony and Prize Distribution"
-    }
-  ],
-  [
-    {
-      "session": "Day 1",
-      "time": "9:00 AM - 10:30 AM",
       "status": "CodeStorm Arena"
     },
     {
@@ -497,6 +124,334 @@
       "session": "Day 3",
       "time": "7:00 PM - 8:30 PM",
       "status": "Closing Ceremony and Prize Distribution"
+    }
+  ],
+  [
+    {
+      "session": "Day 1",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "CodeStorm Arena"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Morning Buzz Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:50 AM - 1:00 PM",
+      "status": "Innovation Lab"
+    },
+    {
+      "session": "Day 1",
+      "time": "1:00 PM - 2:00 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 1",
+      "time": "2:00 PM - 4:00 PM",
+      "status": "Street Games Carnival"
+    },
+    {
+      "session": "Day 1",
+      "time": "4:00 PM - 4:30 PM",
+      "status": "Tea Recharge Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "4:30 PM - 6:30 PM",
+      "status": "Talent Showdown"
+    },
+    {
+      "session": "Day 1",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Fusion Night"
+    },
+    {
+      "session": "Day 2",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "Startup Pitch Clash"
+    },
+    {
+      "session": "Day 2",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Networking Connect Break"
+    },
+    {
+      "session": "Day 2",
+      "time": "10:50 AM - 1:00 PM",
+      "status": "RoboWar Trials"
+    },
+    {
+      "session": "Day 2",
+      "time": "1:00 PM - 2:00 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 2",
+      "time": "2:00 PM - 4:00 PM",
+      "status": "Campus Carnival"
+    },
+    {
+      "session": "Day 2",
+      "time": "4:00 PM - 4:30 PM",
+      "status": "Evening Chill Break"
+    },
+    {
+      "session": "Day 2",
+      "time": "4:30 PM - 6:30 PM",
+      "status": "Battle of Bands"
+    },
+    {
+      "session": "Day 2",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Community Impact Lab"
+    },
+    {
+      "session": "Day 3",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "CodeStorm Arena Finals"
+    },
+    {
+      "session": "Day 3",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Morning Energize Break"
+    },
+    {
+      "session": "Day 3",
+      "time": "10:50 AM - 1:00 PM",
+      "status": "Innovation Lab Workshop"
+    },
+    {
+      "session": "Day 3",
+      "time": "1:00 PM - 2:00 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 3",
+      "time": "2:00 PM - 4:00 PM",
+      "status": "Street Games Carnival Finals"
+    },
+    {
+      "session": "Day 3",
+      "time": "4:00 PM - 4:30 PM",
+      "status": "Tea Refresh Break"
+    },
+    {
+      "session": "Day 3",
+      "time": "4:30 PM - 6:30 PM",
+      "status": "Talent Showdown Finals"
+    },
+    {
+      "session": "Day 3",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Closing Ceremony and Prize Distribution"
+    }
+  ],
+  [
+    {
+      "session": "Day 1",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "CodeStorm Arena"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Morning Buzz Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:50 AM - 1:00 PM",
+      "status": "Innovation Lab"
+    },
+    {
+      "session": "Day 1",
+      "time": "1:00 PM - 2:00 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 1",
+      "time": "2:00 PM - 4:00 PM",
+      "status": "Street Games Carnival"
+    },
+    {
+      "session": "Day 1",
+      "time": "4:00 PM - 4:30 PM",
+      "status": "Tea Recharge Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "4:30 PM - 6:30 PM",
+      "status": "Talent Showdown"
+    },
+    {
+      "session": "Day 1",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Fusion Night"
+    }
+  ],
+  [
+    {
+      "session": "Day 1",
+      "time": "9:00 AM - 9:30 AM",
+      "status": "Opening Ceremony"
+    },
+    {
+      "session": "Day 1",
+      "time": "9:30 AM - 10:30 AM",
+      "status": "Performance Slot 1"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Morning Buzz Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:50 AM - 12:50 PM",
+      "status": "Competition Session 1"
+    },
+    {
+      "session": "Day 1",
+      "time": "12:50 PM - 1:40 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 1",
+      "time": "1:40 PM - 2:40 PM",
+      "status": "Performance Slot 2"
+    },
+    {
+      "session": "Day 1",
+      "time": "2:40 PM - 3:10 PM",
+      "status": "Tea Recharge Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "3:10 PM - 5:10 PM",
+      "status": "Competition Session 2"
+    },
+    {
+      "session": "Day 1",
+      "time": "5:10 PM - 5:40 PM",
+      "status": "Evening Chill Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "5:40 PM - 6:40 PM",
+      "status": "Finale Performance"
+    },
+    {
+      "session": "Day 1",
+      "time": "6:40 PM - 7:00 PM",
+      "status": "Dinner"
+    },
+    {
+      "session": "Day 1",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Closing Ceremony and Prize Distribution"
+    }
+  ],
+  [
+    {
+      "session": "Day 1",
+      "time": "9:00 AM - 10:00 AM",
+      "status": "Registration and Welcome"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:00 AM - 10:30 AM",
+      "status": "Morning Buzz Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "10:30 AM - 12:30 PM",
+      "status": "Preliminary Competitions"
+    },
+    {
+      "session": "Day 1",
+      "time": "12:30 PM - 1:30 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 1",
+      "time": "1:30 PM - 3:00 PM",
+      "status": "Workshops"
+    },
+    {
+      "session": "Day 1",
+      "time": "3:00 PM - 3:30 PM",
+      "status": "Tea Recharge Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "3:30 PM - 5:00 PM",
+      "status": "Smaller Performances"
+    },
+    {
+      "session": "Day 1",
+      "time": "5:00 PM - 5:30 PM",
+      "status": "Evening Chill Break"
+    },
+    {
+      "session": "Day 1",
+      "time": "5:30 PM - 7:00 PM",
+      "status": "Activity Zones and Sponsor Stalls"
+    },
+    {
+      "session": "Day 1",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Dinner and Evening Entertainment"
+    },
+    {
+      "session": "Day 2",
+      "time": "9:00 AM - 10:30 AM",
+      "status": "Final Competitions"
+    },
+    {
+      "session": "Day 2",
+      "time": "10:30 AM - 10:50 AM",
+      "status": "Networking Break"
+    },
+    {
+      "session": "Day 2",
+      "time": "10:50 AM - 12:50 PM",
+      "status": "Major Performances"
+    },
+    {
+      "session": "Day 2",
+      "time": "12:50 PM - 1:50 PM",
+      "status": "Lunch"
+    },
+    {
+      "session": "Day 2",
+      "time": "1:50 PM - 3:20 PM",
+      "status": "Guest Show"
+    },
+    {
+      "session": "Day 2",
+      "time": "3:20 PM - 3:50 PM",
+      "status": "Tea Recharge Break"
+    },
+    {
+      "session": "Day 2",
+      "time": "3:50 PM - 5:50 PM",
+      "status": "Activity Zones and Sponsor Stalls"
+    },
+    {
+      "session": "Day 2",
+      "time": "5:50 PM - 6:20 PM",
+      "status": "Dinner Connect"
+    },
+    {
+      "session": "Day 2",
+      "time": "6:20 PM - 7:00 PM",
+      "status": "Prize Distribution Ceremony"
+    },
+    {
+      "session": "Day 2",
+      "time": "7:00 PM - 8:30 PM",
+      "status": "Finale Performance and Closing Ceremony"
     }
   ]
 ]
