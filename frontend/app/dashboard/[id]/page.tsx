@@ -4,6 +4,12 @@ import { Send, CheckCircle, Mail, History, Clock, Edit2, Save, MessageSquare, Pl
 import Link from 'next/link'
 import { fetchHistory, fetchThreadState } from '../../../lib/api'
 
+// 🚀 Helper to fix the literal \n string bug from the LLM
+const formatText = (text: any) => {
+  if (!text) return "";
+  return String(text).replace(/\\n/g, '\n');
+};
+
 export default function Dashboard({ params }: { params: { id: string } }) {
   // Navigation & History State
   const [threads, setThreads] = useState<any[]>([])
@@ -11,7 +17,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
   // Chat & Toggle State
   const [chatInput, setChatInput] = useState("")
-  const [autoNotify, setAutoNotify] = useState(false) // 🚀 Auto-WhatsApp Toggle
+  const [autoNotify, setAutoNotify] = useState(false) 
   const [messages, setMessages] = useState<{ role: string, content: string }[]>([
     { role: 'ai', content: 'Hello! I am your Event Intelligence Agent. How can we adjust the current plan?' }
   ])
@@ -22,7 +28,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
   const [status, setStatus] = useState("AWAITING_APPROVAL")
   const [isEditing, setIsEditing] = useState(false)
 
-  // 🚀 WebSocket State for Real-Time Streaming
+  // WebSocket State for Real-Time Streaming
   const ws = useRef<WebSocket | null>(null)
   const [liveAction, setLiveAction] = useState("Analyzing request...")
 
@@ -60,19 +66,29 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         .catch(err => console.error("Could not load thread data", err));
     }
 
-    // 🚀 Attach WebSocket to stream Agent activity to the Dashboard
     ws.current = new WebSocket("ws://localhost:8000/ws/swarm")
     ws.current.onmessage = (event) => {
       const data = JSON.parse(event.data)
       if (data.action || data.message) {
         setLiveAction(`[${data.agent || "System"}] ${data.action || data.message}`)
       }
+      
+      // BACKGROUND SYNC LISTENER
+      if (data.action === "REFRESH_WORKSPACE" || data.message === "REFRESH_WORKSPACE") {
+        fetchThreadState(params.id).then(res => {
+            if (res.agent_outputs) {
+              setOutputs((prev: any) => ({
+                ...prev,
+                operations: res.agent_outputs.operations || prev.operations
+              }));
+            }
+        }).catch(err => console.error("Silent sync failed", err));
+      }
     }
 
     return () => ws.current?.close()
   }, [params.id])
 
-  // Handles Chat Submission
   const handleChat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
@@ -82,7 +98,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setStatus("PROCESSING_UPDATE");
-    setLiveAction("Connecting to Swarm..."); // Reset live text
+    setLiveAction("Connecting to Swarm..."); 
 
     try {
       const res = await fetch('http://localhost:8000/api/chat', {
@@ -90,27 +106,20 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           thread_id: params.id,
-          payload: {
-            action: "prompt",
-            message: userMessage,
-            auto_notify: autoNotify 
-          }
+          payload: { action: "prompt", message: userMessage, auto_notify: autoNotify }
         })
       });
       const data = await res.json();
 
-      // If the backend rejects the request, show the real error message!
       if (data.status === "error") {
         setMessages(prev => [...prev, { role: 'ai', content: data.message }]);
         setStatus("AWAITING_APPROVAL");
-        return; // Stop execution
+        return; 
       }
 
-      // Proceed normally if successful
       if (data.schedule) setSchedule(data.schedule);
 
       const incomingOutputs = data.agent_outputs || data;
-      
       setOutputs(prev => ({
         ...prev,
         marketing: incomingOutputs.marketing || prev.marketing,
@@ -118,7 +127,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
         operations: incomingOutputs.operations || prev.operations
       }));
 
-      // 🚀 Fix: Use backend Audit Log for realistic AI replies, fallback to custom message
       const defaultSuccessMsg = autoNotify 
         ? "Workspace updated and WhatsApp notifications have been automatically dispatched!"
         : "I've updated the workspace based on your request. Please review the changes.";
@@ -135,7 +143,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
     }
   }
 
-  // Saves manual UI edits
   const handleSaveEdits = async () => {
     setIsEditing(false);
     setStatus("SAVING_EDITS");
@@ -145,10 +152,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       await fetch('http://localhost:8000/api/edit/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          thread_id: params.id,
-          schedule: schedule
-        })
+        body: JSON.stringify({ thread_id: params.id, schedule: schedule })
       });
       setMessages(prev => [...prev, { role: 'ai', content: "Manual edits successfully saved to memory." }]);
     } catch (e) {
@@ -170,7 +174,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
       const data = await res.json();
 
       const incomingOutputs = data.agent_outputs || data;
-
       if (incomingOutputs.marketing || incomingOutputs.email_outreach_logs || incomingOutputs.comms) {
         setOutputs(prev => ({
           ...prev,
@@ -255,7 +258,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce delay-75"></span>
                   <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce delay-150"></span>
                 </span>
-                {/* 🚀 Stream live websocket text here */}
                 <span className="font-mono text-xs text-indigo-600 font-medium">{liveAction}</span>
               </div>
             </div>
@@ -345,7 +347,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
               {schedule.length === 0 && <p className="text-sm text-slate-400 p-5 text-center italic">No schedule generated yet. Awaiting Swarm.</p>}
               
-              {/* Process Schedule into Groups */}
               {(() => {
                 const grouped: Record<string, any[]> = {};
                 schedule.forEach((item, index) => {
@@ -385,71 +386,87 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                   grouped[day].push({ ...item, session: sessionName, timeOnly, originalIndex: index });
                 });
 
-                return Object.entries(grouped).map(([day, items]) => (
-                  <div key={day} className="mb-10 last:mb-0">
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="h-px flex-1 bg-slate-200"></div>
-                      <span className="bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-widest px-4 py-1.5 rounded-full border border-slate-200 shadow-sm">
-                        {day}
-                      </span>
-                      <div className="h-px flex-1 bg-slate-200"></div>
-                    </div>
+                return Object.entries(grouped).map(([day, items]) => {
+                  
+                  // 🚀 FIX: mathematically sort the items chronologically to prevent out-of-order bugs
+                  const sortedItems = items.sort((a, b) => {
+                    const parseTime = (t: string) => {
+                      const match = t.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+                      if (!match) return 0;
+                      let hours = parseInt(match[1], 10);
+                      const mins = parseInt(match[2], 10);
+                      const mod = match[3].toUpperCase();
+                      if (mod === 'PM' && hours < 12) hours += 12;
+                      if (mod === 'AM' && hours === 12) hours = 0;
+                      return hours * 60 + mins;
+                    };
+                    return parseTime(a.timeOnly) - parseTime(b.timeOnly);
+                  });
 
-                    <div className="relative border-l-2 border-slate-200 ml-4 md:ml-6 space-y-6 pb-4">
-                      {items.map((item, i) => (
-                        <div key={i} className="relative pl-6 md:pl-8 group">
-                          {/* Timeline Dot */}
-                          <div className="absolute w-3.5 h-3.5 bg-white border-2 border-indigo-500 rounded-full -left-[9px] top-4 ring-4 ring-white group-hover:bg-indigo-500 transition-colors"></div>
-                          
-                          {/* Event Card */}
-                          <div className="bg-slate-50 border border-slate-100 hover:border-indigo-100 p-4 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col gap-2 relative">
-                            {isEditing ? (
-                              <div className="flex flex-wrap gap-3 items-center">
-                                <input 
-                                  className="bg-white text-indigo-600 text-xs font-mono font-bold p-2.5 rounded-lg w-36 border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100 transition-all" 
-                                  value={item.timeOnly} 
-                                  onChange={e => { 
-                                    const newSched = [...schedule]; 
-                                    newSched[item.originalIndex].time = `${day} | ${e.target.value}`; 
-                                    setSchedule(newSched); 
-                                  }} 
-                                />
-                                <input 
-                                  className="bg-white text-slate-800 text-sm flex-1 p-2.5 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100 font-semibold transition-all" 
-                                  value={item.session} 
-                                  onChange={e => { 
-                                    const newSched = [...schedule]; 
-                                    newSched[item.originalIndex].session = e.target.value; 
-                                    setSchedule(newSched); 
-                                  }} 
-                                />
-                                <button 
-                                  onClick={() => { 
-                                    const newSched = schedule.filter((_, idx) => idx !== item.originalIndex); 
-                                    setSchedule(newSched); 
-                                  }}
-                                  className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
-                                  title="Delete Session"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4">
-                                <span className="text-indigo-600 text-xs font-mono font-bold min-w-[140px]">
-                                  {item.timeOnly}
-                                </span>
-                                <h4 className="text-sm font-bold text-slate-800 leading-snug">
-                                  {item.session}
-                                </h4>
-                              </div>
-                            )}
+                  return (
+                    <div key={day} className="mb-10 last:mb-0">
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className="h-px flex-1 bg-slate-200"></div>
+                        <span className="bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-widest px-4 py-1.5 rounded-full border border-slate-200 shadow-sm">
+                          {day}
+                        </span>
+                        <div className="h-px flex-1 bg-slate-200"></div>
+                      </div>
+
+                      <div className="relative border-l-2 border-slate-200 ml-4 md:ml-6 space-y-6 pb-4">
+                        {sortedItems.map((item, i) => (
+                          <div key={i} className="relative pl-6 md:pl-8 group">
+                            <div className="absolute w-3.5 h-3.5 bg-white border-2 border-indigo-500 rounded-full -left-[9px] top-4 ring-4 ring-white group-hover:bg-indigo-500 transition-colors"></div>
+                            
+                            <div className="bg-slate-50 border border-slate-100 hover:border-indigo-100 p-4 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col gap-2 relative">
+                              {isEditing ? (
+                                <div className="flex flex-wrap gap-3 items-center">
+                                  <input 
+                                    className="bg-white text-indigo-600 text-xs font-mono font-bold p-2.5 rounded-lg w-36 border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100 transition-all" 
+                                    value={item.timeOnly} 
+                                    onChange={e => { 
+                                      const newSched = [...schedule]; 
+                                      newSched[item.originalIndex].time = `${day} | ${e.target.value}`; 
+                                      setSchedule(newSched); 
+                                    }} 
+                                  />
+                                  <input 
+                                    className="bg-white text-slate-800 text-sm flex-1 p-2.5 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-100 font-semibold transition-all" 
+                                    value={item.session} 
+                                    onChange={e => { 
+                                      const newSched = [...schedule]; 
+                                      newSched[item.originalIndex].session = e.target.value; 
+                                      setSchedule(newSched); 
+                                    }} 
+                                  />
+                                  <button 
+                                    onClick={() => { 
+                                      const newSched = schedule.filter((_, idx) => idx !== item.originalIndex); 
+                                      setSchedule(newSched); 
+                                    }}
+                                    className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                                    title="Delete Session"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4">
+                                  <span className="text-indigo-600 text-xs font-mono font-bold min-w-[140px]">
+                                    {item.timeOnly}
+                                  </span>
+                                  <h4 className="text-sm font-bold text-slate-800 leading-snug">
+                                    {item.session}
+                                  </h4>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ));
+                  );
+                });
               })()}
             </div>
           </section>
@@ -463,25 +480,43 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
             <div className="space-y-4">
               {outputs.comms?.length === 0 && <p className="text-sm text-slate-400 italic text-center p-4">No comms drafted yet.</p>}
+              
               {outputs.comms?.map((item: any, i: number) => {
                 const data = item.output;
+                const isObject = typeof data === 'object' && data !== null;
+                const currentStatus = isObject ? (data.status || 'DRAFTED') : 'DRAFTED';
+
                 return (
                   <div key={i} className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
                     <div className="flex justify-between items-center mb-3">
                       <div className="text-xs font-bold text-slate-500 bg-slate-50 inline-block px-2.5 py-1 rounded-md">{item.task}</div>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${data.status === 'SENT' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{data.status || 'DRAFTED'}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${currentStatus === 'SENT' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {currentStatus}
+                      </span>
                     </div>
 
-                    {data.use_email && (
-                      <div className="mb-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                        <p className="text-xs text-slate-500 mb-1">📧 <strong>{data.email_subject}</strong></p>
-                        <p className="text-sm text-slate-600 whitespace-pre-wrap">{data.email_body}</p>
-                      </div>
-                    )}
-                    {data.use_whatsapp && (
-                      <div className="bg-green-50 p-3 rounded-lg border border-green-100">
-                        <p className="text-xs text-green-700 mb-1 font-bold">💬 WhatsApp</p>
-                        <p className="text-sm text-green-800 whitespace-pre-wrap">{data.whatsapp_body}</p>
+                    {isObject ? (
+                      <>
+                        {data.use_email && (
+                          <div className="mb-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                            <p className="text-xs text-slate-500 mb-1">📧 <strong>{data.email_subject}</strong></p>
+                            {/* 🚀 FIX: formatText applies real new lines! */}
+                            <p className="text-sm text-slate-600 whitespace-pre-wrap">{formatText(data.email_body)}</p>
+                          </div>
+                        )}
+                        {data.use_whatsapp && (
+                          <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                            <p className="text-xs text-green-700 mb-1 font-bold">💬 WhatsApp</p>
+                            <p className="text-sm text-green-800 whitespace-pre-wrap">{formatText(data.whatsapp_body)}</p>
+                          </div>
+                        )}
+                        {!data.use_email && !data.use_whatsapp && (
+                           <pre className="text-[11px] text-slate-600 font-mono whitespace-pre-wrap leading-relaxed">{JSON.stringify(data, null, 2)}</pre>
+                        )}
+                      </>
+                    ) : (
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{formatText(String(data))}</p>
                       </div>
                     )}
                   </div>
@@ -508,7 +543,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                         {JSON.stringify(item.output, null, 2)}
                       </pre>
                     ) : (
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{item.output}</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{formatText(item.output)}</p>
                     )}
                   </div>
                 )
@@ -537,8 +572,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
 
                 return (
                   <div key={i} className={`p-5 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full hover:shadow-md transition-shadow ${domain === 'itinerary' ? 'md:col-span-2' : ''}`}>
-                    
-                    {/* Card Header */}
                     <div className="flex justify-between items-start mb-4">
                       <span className={`text-[10px] font-extrabold px-3 py-1.5 rounded-full uppercase tracking-widest shadow-sm ${
                         domain === 'budget' ? 'text-emerald-700 bg-emerald-100' : 
@@ -554,10 +587,7 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                       </span>
                     </div>
 
-                    {/* Card Content Area */}
                     <div className="flex-1 bg-slate-50/50 rounded-xl p-4 border border-slate-100 overflow-y-auto max-h-[350px]">
-                      
-                      {/* BUDGET UI */}
                       {domain === 'budget' && isObject ? (
                         <div className="space-y-4">
                           <div className="flex justify-between items-center bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-200 shadow-sm">
@@ -592,8 +622,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                           </div>
                         </div>
                       ) 
-                      
-                      /* VOLUNTEER UI */
                       : domain === 'volunteer' && isObject ? (
                         <div className="space-y-4">
                           <div className="flex justify-between items-center bg-blue-50 text-blue-800 p-4 rounded-xl border border-blue-200 shadow-sm">
@@ -614,17 +642,14 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                           </div>
                         </div>
                       )
-
-                      /* SPONSOR UI */
                       : domain === 'sponsor' && isObject ? (
                         <div className="space-y-4">
                           <div className="bg-purple-50 text-purple-800 p-4 rounded-xl border border-purple-200 shadow-sm">
                             <h4 className="font-bold text-sm mb-2 flex items-center gap-2">
                               📧 {item.output.pitch_subject || "Sponsorship Pitch"}
                             </h4>
-                            <p className="text-xs opacity-80 whitespace-pre-wrap leading-relaxed">{item.output.pitch_body || "Please see our tiers below."}</p>
+                            <p className="text-xs opacity-80 whitespace-pre-wrap leading-relaxed">{formatText(item.output.pitch_body || "Please see our tiers below.")}</p>
                           </div>
-                          
                           <div>
                             <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Sponsorship Tiers</h4>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -637,7 +662,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                               ))}
                             </div>
                           </div>
-
                           <div>
                             <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Target Companies</h4>
                             <div className="space-y-2">
@@ -651,8 +675,6 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                           </div>
                         </div>
                       )
-
-                      /* ITINERARY UI */
                       : domain === 'itinerary' && Array.isArray(item.output) ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {item.output.map((event: any, idx: number) => (
@@ -667,15 +689,13 @@ export default function Dashboard({ params }: { params: { id: string } }) {
                           ))}
                         </div>
                       )
-
-                      /* RAW JSON FALLBACK */
                       : isObject ? (
                         <pre className="text-[11px] text-slate-600 font-mono whitespace-pre-wrap leading-relaxed">
                           {JSON.stringify(item.output, null, 2)}
                         </pre>
                       ) : (
                         <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                          {item.output}
+                          {formatText(item.output)}
                         </p>
                       )}
                     </div>
